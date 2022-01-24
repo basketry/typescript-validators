@@ -335,11 +335,17 @@ function buildNonLocalTypeClause(
           `Array.isArray(params.${camel(param.name)})`,
           `params.${camel(
             param.name,
-          )}.some(x => typeof x !== '${rootTypeName}')`,
+          )}.some(x => typeof x !== '${rootTypeName}'${
+            rootTypeName === 'number' ? ' || Number.isNaN(x)' : ''
+          })`,
         ]
       : [
           `typeof params.${camel(param.name)} !== 'undefined'`,
-          `typeof params.${camel(param.name)} !== '${rootTypeName}'`,
+          `(typeof params.${camel(param.name)} !== '${rootTypeName}'${
+            rootTypeName === 'number'
+              ? ` || Number.isNaN(params.${camel(param.name)})`
+              : ''
+          })`,
         ];
 
     const message = `"${camel(param.name)}" must be a ${rootTypeName}`;
