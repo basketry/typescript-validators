@@ -648,6 +648,20 @@ export function validateExhaustiveParamsParams(params: {
   return errors;
 }
 
+/**
+ * Validates input parameters for the allAuthSchemes() method.
+ */
+export function validateAllAuthSchemesParams(): ValidationError[] {
+  return [];
+}
+
+/**
+ * Validates input parameters for the comboAuthSchemes() method.
+ */
+export function validateComboAuthSchemesParams(): ValidationError[] {
+  return [];
+}
+
 export function validateGizmo(params: types.Gizmo): ValidationError[] {
   const errors: ValidationError[] = [];
   if (typeof params.id !== 'undefined' && typeof params.id !== 'string') {
@@ -726,15 +740,14 @@ export function validateWidget(params: types.Widget): ValidationError[] {
       path: 'name',
     });
   }
+  if (typeof params.fiz === 'undefined') {
+    errors.push({ code: 'REQUIRED', title: '"fiz" is required', path: 'fiz' });
+  }
   if (
     typeof params.fiz !== 'undefined' &&
     (typeof params.fiz !== 'number' || Number.isNaN(params.fiz))
   ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"fiz" must be a number if supplied',
-      path: 'fiz',
-    });
+    errors.push({ code: 'TYPE', title: '"fiz" must be a number', path: 'fiz' });
   }
   if (typeof params.fiz === 'number' && params.fiz % 3 !== 0) {
     errors.push({
@@ -822,15 +835,14 @@ export function validateNewWidget(params: types.NewWidget): ValidationError[] {
       path: 'name',
     });
   }
+  if (typeof params.fiz === 'undefined') {
+    errors.push({ code: 'REQUIRED', title: '"fiz" is required', path: 'fiz' });
+  }
   if (
     typeof params.fiz !== 'undefined' &&
     (typeof params.fiz !== 'number' || Number.isNaN(params.fiz))
   ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"fiz" must be a number if supplied',
-      path: 'fiz',
-    });
+    errors.push({ code: 'TYPE', title: '"fiz" must be a number', path: 'fiz' });
   }
   if (typeof params.fiz === 'number' && params.fiz % 3 !== 0) {
     errors.push({

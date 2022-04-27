@@ -10,7 +10,7 @@ export function buildParamsValidatorName(
   method: Method,
   validatorModule?: string,
 ): string {
-  return prefix(validatorModule, camel(`validate_${method.name}_params`));
+  return prefix(validatorModule, camel(`validate_${method.name.value}_params`));
 }
 
 export function buildTypeValidatorName(
@@ -24,12 +24,12 @@ export function buildEnumValidatorName(
   e: Enum,
   validatorModule?: string,
 ): string {
-  return prefix(validatorModule, camel(`validate_${e.name}`));
+  return prefix(validatorModule, camel(`validate_${e.name.value}`));
 }
 
 export function buildTypeGuardName(
   type: Type,
   validatorModule?: string,
 ): string {
-  return prefix(validatorModule, camel(`is_${type.name}`));
+  return prefix(validatorModule, camel(`is_${type.name.value}`));
 }

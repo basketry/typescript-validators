@@ -87,7 +87,7 @@ export class ValidatorFactory implements FileFactory {
 
     return [
       {
-        path: [`v${service.majorVersion}`, 'validators.ts'],
+        path: [`v${service.majorVersion.value}`, 'validators.ts'],
         contents: formatted,
       },
     ];
@@ -196,7 +196,7 @@ export class ValidatorFactory implements FileFactory {
 
     yield 'const errors: ValidationError[] = [];';
 
-    const values = `[${e.values.map((v) => `"${v}"`).join(', ')}]`;
+    const values = `[${e.values.map((v) => `"${v.value}"`).join(', ')}]`;
 
     const conditions = [
       `typeof value === 'string'`,
@@ -319,7 +319,7 @@ function buildLocalTypeClause(param: Parameter | Property): string | undefined {
 export const buildStringEnumRuleClause: GuardClauseFactory = (param, rule) => {
   if (rule.id === 'string-enum') {
     const paramName = buildParameterName(param);
-    const values = `[${rule.values.map((v) => `"${v}"`).join(', ')}]`;
+    const values = `[${rule.values.map((v) => `"${v.value}"`).join(', ')}]`;
 
     const conditions = buildConditions(param, (name) => [
       `typeof ${name} === 'string'`,
@@ -340,12 +340,12 @@ export const buildStringMaxLengthClause: GuardClauseFactory = (param, rule) => {
     const paramName = buildParameterName(param);
     const conditions = buildConditions(param, (name) => [
       `typeof ${name} === 'string'`,
-      `${name}.length > ${rule.length}`,
+      `${name}.length > ${rule.length.value}`,
     ]);
 
     return `if(${conditions.join(' && ')}) {${buildError(
       rule.id,
-      buildMessage(param, `"${paramName}" max length is ${rule.length}`),
+      buildMessage(param, `"${paramName}" max length is ${rule.length.value}`),
       paramName,
     )}}`;
   }
@@ -357,12 +357,12 @@ export const buildStringMinLengthClause: GuardClauseFactory = (param, rule) => {
     const paramName = buildParameterName(param);
     const conditions = buildConditions(param, (name) => [
       `typeof ${name} === 'string'`,
-      `$${name}.length < ${rule.length}`,
+      `$${name}.length < ${rule.length.value}`,
     ]);
 
     return `if(${conditions.join(' && ')}) {${buildError(
       rule.id,
-      buildMessage(param, `"${paramName}" min length is ${rule.length}`),
+      buildMessage(param, `"${paramName}" min length is ${rule.length.value}`),
       paramName,
     )}}`;
   }
@@ -374,14 +374,14 @@ export const buildStringPatternClause: GuardClauseFactory = (param, rule) => {
     const paramName = buildParameterName(param);
     const conditions = buildConditions(param, (name) => [
       `typeof ${name} === 'string'`,
-      `/${rule.pattern}/.test(${name})`,
+      `/${rule.pattern.value}/.test(${name})`,
     ]);
 
     return `if(${conditions.join(' && ')}) {${buildError(
       rule.id,
       buildMessage(
         param,
-        `"${paramName}" must match the pattern /${rule.pattern}/`,
+        `"${paramName}" must match the pattern /${rule.pattern.value}/`,
       ),
       paramName,
     )}}`;
@@ -397,12 +397,15 @@ export const buildNumberMultipleOfClause: GuardClauseFactory = (
     const paramName = buildParameterName(param);
     const conditions = buildConditions(param, (name) => [
       `typeof ${name} === 'number'`,
-      `${name} % ${rule.value} !== 0`,
+      `${name} % ${rule.value.value} !== 0`,
     ]);
 
     return `if(${conditions.join(' && ')}) {${buildError(
       rule.id,
-      buildMessage(param, `"${paramName}" must be a multiple of ${rule.value}`),
+      buildMessage(
+        param,
+        `"${paramName}" must be a multiple of ${rule.value.value}`,
+      ),
       paramName,
     )}}`;
   }
@@ -417,12 +420,15 @@ export const buildNumberGreaterThanClause: GuardClauseFactory = (
     const paramName = buildParameterName(param);
     const conditions = buildConditions(param, (name) => [
       `typeof ${name} === 'number'`,
-      `${name} <= ${rule.value}`,
+      `${name} <= ${rule.value.value}`,
     ]);
 
     return `if(${conditions.join(' && ')}) {${buildError(
       rule.id,
-      buildMessage(param, `"${paramName}" must be greater than ${rule.value}`),
+      buildMessage(
+        param,
+        `"${paramName}" must be greater than ${rule.value.value}`,
+      ),
       paramName,
     )}}`;
   }
@@ -437,14 +443,14 @@ export const buildNumberGreaterOrEqualClause: GuardClauseFactory = (
     const paramName = buildParameterName(param);
     const conditions = buildConditions(param, (name) => [
       `typeof ${name} === 'number'`,
-      `${name} < ${rule.value}`,
+      `${name} < ${rule.value.value}`,
     ]);
 
     return `if(${conditions.join(' && ')}) {${buildError(
       rule.id,
       buildMessage(
         param,
-        `"${paramName}" must be greater than or equal to ${rule.value}`,
+        `"${paramName}" must be greater than or equal to ${rule.value.value}`,
       ),
       paramName,
     )}}`;
@@ -457,12 +463,15 @@ export const buildNumberLessThanClause: GuardClauseFactory = (param, rule) => {
     const paramName = buildParameterName(param);
     const conditions = buildConditions(param, (name) => [
       `typeof ${name} === 'number'`,
-      `${name} >= ${rule.value}`,
+      `${name} >= ${rule.value.value}`,
     ]);
 
     return `if(${conditions.join(' && ')}) {${buildError(
       rule.id,
-      buildMessage(param, `"${paramName}" must be less than ${rule.value}`),
+      buildMessage(
+        param,
+        `"${paramName}" must be less than ${rule.value.value}`,
+      ),
       paramName,
     )}}`;
   }
@@ -477,14 +486,14 @@ export const buildNumberLessOrEqualClause: GuardClauseFactory = (
     const paramName = buildParameterName(param);
     const conditions = buildConditions(param, (name) => [
       `typeof ${name} === 'number'`,
-      `${name} > ${rule.value}`,
+      `${name} > ${rule.value.value}`,
     ]);
 
     return `if(${conditions.join(' && ')}) {${buildError(
       rule.id,
       buildMessage(
         param,
-        `"${paramName}" must be less than or equal to ${rule.value}`,
+        `"${paramName}" must be less than or equal to ${rule.value.value}`,
       ),
       paramName,
     )}}`;
@@ -497,12 +506,12 @@ export const buildArrayMaxItemsClause: GuardClauseFactory = (param, rule) => {
     const paramName = buildParameterName(param);
     const conditions = [
       `Array.isArray(params.${paramName})`,
-      `params.${paramName}.length > ${rule.max}`,
+      `params.${paramName}.length > ${rule.max.value}`,
     ];
 
     return `if(${conditions.join(' && ')}) {${buildError(
       rule.id,
-      `"${paramName}" max length is ${rule.max}`,
+      `"${paramName}" max length is ${rule.max.value}`,
       paramName,
     )}}`;
   }
@@ -514,12 +523,12 @@ export const buildArrayMinItemsClause: GuardClauseFactory = (param, rule) => {
     const paramName = buildParameterName(param);
     const conditions = [
       `Array.isArray(params.${paramName})`,
-      `params.${paramName}.length < ${rule.min}`,
+      `params.${paramName}.length < ${rule.min.value}`,
     ];
 
     return `if(${conditions.join(' && ')}) {${buildError(
       rule.id,
-      `"${paramName}" min length is ${rule.min}`,
+      `"${paramName}" min length is ${rule.min.value}`,
       paramName,
     )}}`;
   }
@@ -534,7 +543,7 @@ export const buildArrayUniqueItemsClause: GuardClauseFactory = (
     const paramName = buildParameterName(param);
     const conditions = [
       `Array.isArray(params.${paramName})`,
-      `params.${param.name}.length === new Set(${paramName}).length`,
+      `params.${param.name.value}.length === new Set(${paramName}).length`,
     ];
 
     return `if(${conditions.join(' && ')}) {${buildError(
