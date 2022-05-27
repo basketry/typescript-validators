@@ -190,6 +190,120 @@ export function validateDeleteWidgetFooParams(params: {
 }
 
 /**
+ * Validates input parameters for the exhaustiveFormats() method.
+ */
+export function validateExhaustiveFormatsParams(params?: {
+  stringNoFormat?: string;
+  stringDate?: Date;
+  stringDateTime?: Date;
+  integerNoFormat?: number;
+  integerInt32?: number;
+  integerInt64?: number;
+  numberNoFormat?: number;
+  numberFloat?: number;
+  numberDouble?: number;
+}): ValidationError[] {
+  const errors: ValidationError[] = [];
+  if (!params) return [];
+  if (
+    typeof params.stringNoFormat !== 'undefined' &&
+    typeof params.stringNoFormat !== 'string'
+  ) {
+    errors.push({
+      code: 'TYPE',
+      title: '"stringNoFormat" must be a string if supplied',
+      path: 'stringNoFormat',
+    });
+  }
+  if (
+    typeof params.stringDate !== 'undefined' &&
+    !(params.stringDate instanceof Date)
+  ) {
+    errors.push({
+      code: 'TYPE',
+      title: '"stringDate" must be a any if supplied',
+      path: 'stringDate',
+    });
+  }
+  if (
+    typeof params.stringDateTime !== 'undefined' &&
+    !(params.stringDateTime instanceof Date)
+  ) {
+    errors.push({
+      code: 'TYPE',
+      title: '"stringDateTime" must be a any if supplied',
+      path: 'stringDateTime',
+    });
+  }
+  if (
+    typeof params.integerNoFormat !== 'undefined' &&
+    (typeof params.integerNoFormat !== 'number' ||
+      Number.isNaN(params.integerNoFormat))
+  ) {
+    errors.push({
+      code: 'TYPE',
+      title: '"integerNoFormat" must be a number if supplied',
+      path: 'integerNoFormat',
+    });
+  }
+  if (
+    typeof params.integerInt32 !== 'undefined' &&
+    (typeof params.integerInt32 !== 'number' ||
+      Number.isNaN(params.integerInt32))
+  ) {
+    errors.push({
+      code: 'TYPE',
+      title: '"integerInt32" must be a number if supplied',
+      path: 'integerInt32',
+    });
+  }
+  if (
+    typeof params.integerInt64 !== 'undefined' &&
+    (typeof params.integerInt64 !== 'number' ||
+      Number.isNaN(params.integerInt64))
+  ) {
+    errors.push({
+      code: 'TYPE',
+      title: '"integerInt64" must be a number if supplied',
+      path: 'integerInt64',
+    });
+  }
+  if (
+    typeof params.numberNoFormat !== 'undefined' &&
+    (typeof params.numberNoFormat !== 'number' ||
+      Number.isNaN(params.numberNoFormat))
+  ) {
+    errors.push({
+      code: 'TYPE',
+      title: '"numberNoFormat" must be a number if supplied',
+      path: 'numberNoFormat',
+    });
+  }
+  if (
+    typeof params.numberFloat !== 'undefined' &&
+    (typeof params.numberFloat !== 'number' || Number.isNaN(params.numberFloat))
+  ) {
+    errors.push({
+      code: 'TYPE',
+      title: '"numberFloat" must be a number if supplied',
+      path: 'numberFloat',
+    });
+  }
+  if (
+    typeof params.numberDouble !== 'undefined' &&
+    (typeof params.numberDouble !== 'number' ||
+      Number.isNaN(params.numberDouble))
+  ) {
+    errors.push({
+      code: 'TYPE',
+      title: '"numberDouble" must be a number if supplied',
+      path: 'numberDouble',
+    });
+  }
+  return errors;
+}
+
+/**
  * Validates input parameters for the exhaustiveParams() method.
  */
 export function validateExhaustiveParamsParams(params: {

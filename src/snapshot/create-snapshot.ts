@@ -7,11 +7,7 @@ const pkg = require('../../package.json');
 const withVersion = `${pkg.name}@${pkg.version}`;
 const withoutVersion = `${pkg.name}@{{version}}`;
 
-const service = JSON.parse(
-  readFileSync(join(process.cwd(), 'src', 'snapshot', 'service.json')).toString(
-    'utf8',
-  ),
-);
+const service = require('basketry/lib/example-ir.json');
 
 const snapshotFiles = [
   ...generateTypes(service),
