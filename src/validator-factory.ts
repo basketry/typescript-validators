@@ -273,21 +273,40 @@ function buildNonLocalTypeClause(
     const rootTypeName = buildRootTypeName(param, 'types');
     const paramName = buildParameterName(param);
 
-    const conditions = param.isArray
-      ? [
+    const conditions: string[] = [];
+
+    const rootCondition = (variable: string) => {
+      if (
+        param.typeName.value === 'date' ||
+        param.typeName.value === 'date-time'
+      ) {
+        return `!(${variable} instanceof Date)`;
+      } else {
+        return `typeof ${variable} !== '${rootTypeName}'`;
+      }
+    };
+
+    if (param.isArray) {
+      conditions.push(
+        ...[
           `Array.isArray(params.${paramName})`,
-          `params.${paramName}.some(x => typeof x !== '${rootTypeName}'${
+          `params.${paramName}.some(x => ${rootCondition('x')}${
             rootTypeName === 'number' ? ' || Number.isNaN(x)' : ''
           })`,
-        ]
-      : [
+        ],
+      );
+    } else {
+      conditions.push(
+        ...[
           `typeof params.${paramName} !== 'undefined'`,
-          `(typeof params.${paramName} !== '${rootTypeName}'${
+          `(${rootCondition(`params.${paramName}`)}${
             rootTypeName === 'number'
               ? ` || Number.isNaN(params.${paramName})`
               : ''
           })`,
-        ];
+        ],
+      );
+    }
 
     const message = `"${paramName}" must be a ${rootTypeName}`;
 
