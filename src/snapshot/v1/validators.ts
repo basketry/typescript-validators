@@ -221,7 +221,7 @@ export function validateExhaustiveFormatsParams(params?: {
   ) {
     errors.push({
       code: 'TYPE',
-      title: '"stringDate" must be a any if supplied',
+      title: '"stringDate" must be a Date if supplied',
       path: 'stringDate',
     });
   }
@@ -231,7 +231,7 @@ export function validateExhaustiveFormatsParams(params?: {
   ) {
     errors.push({
       code: 'TYPE',
-      title: '"stringDateTime" must be a any if supplied',
+      title: '"stringDateTime" must be a Date if supplied',
       path: 'stringDateTime',
     });
   }

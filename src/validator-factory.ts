@@ -3,7 +3,6 @@ import { format } from 'prettier';
 import {
   Enum,
   File,
-  FileFactory,
   hasOnlyOptionalParameters,
   hasParameters,
   isRequired,
@@ -34,7 +33,7 @@ export type GuardClauseFactory = (
   rule: ValidationRule,
 ) => string | undefined;
 
-export class ValidatorFactory implements FileFactory {
+export class ValidatorFactory {
   public readonly target = 'typescript';
 
   constructor(private readonly factories: GuardClauseFactory[]) {}
@@ -120,8 +119,8 @@ export class ValidatorFactory implements FileFactory {
 
     for (const param of method.parameters) {
       yield buildRequiredClause(param);
-      yield buildNonLocalTypeClause(param);
-      yield buildLocalTypeClause(param);
+      yield buildPrimitiveTypeClause(param);
+      yield buildCustomTypeClause(param);
 
       for (const rule of param.rules) {
         for (const factory of this.factories) {
@@ -156,8 +155,8 @@ export class ValidatorFactory implements FileFactory {
 
     for (const property of type.properties) {
       yield buildRequiredClause(property);
-      yield buildNonLocalTypeClause(property);
-      yield buildLocalTypeClause(property);
+      yield buildPrimitiveTypeClause(property);
+      yield buildCustomTypeClause(property);
 
       for (const rule of property.rules) {
         for (const factory of this.factories) {
@@ -266,10 +265,10 @@ function buildRequiredClause(param: Parameter | Property): string | undefined {
   return;
 }
 
-function buildNonLocalTypeClause(
+function buildPrimitiveTypeClause(
   param: Parameter | Property,
 ): string | undefined {
-  if (!param.isLocal && !param.isUnknown) {
+  if (param.isPrimitive && param.typeName.value !== 'untyped') {
     const rootTypeName = buildRootTypeName(param, 'types');
     const paramName = buildParameterName(param);
 
@@ -322,8 +321,10 @@ function buildNonLocalTypeClause(
   return;
 }
 
-function buildLocalTypeClause(param: Parameter | Property): string | undefined {
-  if (param.isLocal && !param.isUnknown) {
+function buildCustomTypeClause(
+  param: Parameter | Property,
+): string | undefined {
+  if (!param.isPrimitive) {
     const typeValidatorName = buildTypeValidatorName(param);
     const paramName = buildParameterName(param);
     if (param.isArray) {
