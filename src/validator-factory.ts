@@ -13,7 +13,7 @@ import {
   Type,
   ValidationRule,
 } from 'basketry';
-import { warning } from './warning';
+import { header as warning } from '@basketry/typescript/lib/warning';
 import {
   buildEnumValidatorName,
   buildParamsValidatorName,
@@ -28,6 +28,8 @@ import {
   buildTypeName,
 } from '@basketry/typescript';
 
+import { NamespacedTypescriptOptions } from '@basketry/typescript/lib/types';
+
 export type GuardClauseFactory = (
   param: Parameter | Property,
   rule: ValidationRule,
@@ -36,13 +38,17 @@ export type GuardClauseFactory = (
 export class ValidatorFactory {
   public readonly target = 'typescript';
 
-  constructor(private readonly factories: GuardClauseFactory[]) {}
+  constructor(
+    private readonly factories: GuardClauseFactory[],
+    private readonly service: Service,
+    private readonly options?: NamespacedTypescriptOptions,
+  ) {}
 
-  build(service: Service): File[] {
+  build(): File[] {
     const imports = Array.from(this.buildImports()).join('\n');
     const standardTypes = Array.from(this.buildStandardTypes()).join('\n');
 
-    const methodParams = service.interfaces
+    const methodParams = this.service.interfaces
       .map((int) => int.methods)
       .reduce((a, b) => a.concat(b), [])
       .map((m) =>
@@ -52,7 +58,7 @@ export class ValidatorFactory {
       )
       .join('\n\n');
 
-    const types = service.types
+    const types = this.service.types
       .map((t) =>
         Array.from(this.buildTypeValidator(t))
           .filter((x) => x)
@@ -60,7 +66,7 @@ export class ValidatorFactory {
       )
       .join('\n\n');
 
-    const enums = service.enums
+    const enums = this.service.enums
       .map((e) =>
         Array.from(this.buildEnumValidator(e))
           .filter((x) => x)
@@ -68,8 +74,14 @@ export class ValidatorFactory {
       )
       .join('\n\n');
 
+    const header = warning(
+      this.service,
+      require('../package.json'),
+      this.options,
+    );
+
     const contents = [
-      warning,
+      header,
       imports,
       standardTypes,
       methodParams,
@@ -86,14 +98,16 @@ export class ValidatorFactory {
 
     return [
       {
-        path: [`v${service.majorVersion.value}`, 'validators.ts'],
+        path: [`v${this.service.majorVersion.value}`, 'validators.ts'],
         contents: formatted,
       },
     ];
   }
 
   private *buildImports(): Iterable<string> {
-    yield 'import * as types from "./types"';
+    yield `import${
+      this.options?.typescript?.typeImports ? ' type ' : ' '
+    }* as types from "./types"`;
   }
 
   private *buildStandardTypes(): Iterable<string> {

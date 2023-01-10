@@ -14,7 +14,7 @@ describe('parser', () => {
 
     // ACT
     const int = generateTypes(service);
-    const validator = new ValidatorFactory(defaultFactories).build(service);
+    const validator = new ValidatorFactory(defaultFactories, service).build();
 
     // ASSERT
     for (const file of [...int, ...validator]) {

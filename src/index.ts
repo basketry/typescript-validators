@@ -3,7 +3,7 @@ import { defaultFactories, ValidatorFactory } from './validator-factory';
 
 export * from './name-factory';
 
-const generator: Generator = (service) =>
-  new ValidatorFactory(defaultFactories).build(service);
+const generator: Generator = (service, options) =>
+  new ValidatorFactory(defaultFactories, service, options).build();
 
 export default generator;

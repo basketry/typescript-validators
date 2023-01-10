@@ -11,7 +11,7 @@ const service = require('basketry/lib/example-ir.json');
 
 const snapshotFiles = [
   ...generateTypes(service),
-  ...new ValidatorFactory(defaultFactories).build(service),
+  ...new ValidatorFactory(defaultFactories, service).build(),
 ];
 
 for (const file of snapshotFiles) {
