@@ -42,7 +42,7 @@
   },
   "dependencies": {
     "@basketry/typescript": "^0.0.14",
-    "basketry": "^0.0.21",
+    "basketry": "^0.0.34",
     "case": "^1.6.3",
     "pluralize": "^8.0.0",
     "semver": "^7.3.5"
