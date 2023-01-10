@@ -1,6 +1,6 @@
 {
   "name": "@basketry/typescript-validators",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Basketry generator for generating method validators for Typescript applications",
   "main": "./lib/index.js",
   "scripts": {
