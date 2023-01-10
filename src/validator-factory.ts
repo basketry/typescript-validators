@@ -26,7 +26,7 @@ import {
   buildRootTypeName,
   buildTypeName,
 } from '@basketry/typescript';
-import { format } from '@basketry/typescript/lib/utils';
+import { eslintDisable, format, from } from '@basketry/typescript/lib/utils';
 
 import { NamespacedTypescriptOptions } from '@basketry/typescript/lib/types';
 
@@ -80,8 +80,11 @@ export class ValidatorFactory {
       this.options,
     );
 
+    const disable = from(eslintDisable(this.options || {}));
+
     const contents = [
       header,
+      disable,
       imports,
       standardTypes,
       methodParams,
