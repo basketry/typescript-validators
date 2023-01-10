@@ -1,5 +1,4 @@
 import { constant } from 'case';
-import { format } from 'prettier';
 import {
   Enum,
   File,
@@ -27,6 +26,7 @@ import {
   buildRootTypeName,
   buildTypeName,
 } from '@basketry/typescript';
+import { format } from '@basketry/typescript/lib/utils';
 
 import { NamespacedTypescriptOptions } from '@basketry/typescript/lib/types';
 
@@ -88,18 +88,11 @@ export class ValidatorFactory {
       types,
       enums,
     ].join('\n\n');
-    const formatted = format(contents, {
-      singleQuote: true,
-      useTabs: false,
-      tabWidth: 2,
-      trailingComma: 'all',
-      parser: 'typescript',
-    });
 
     return [
       {
         path: [`v${this.service.majorVersion.value}`, 'validators.ts'],
-        contents: formatted,
+        contents: format(contents, this.options),
       },
     ];
   }
