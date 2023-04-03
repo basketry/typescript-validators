@@ -19,6 +19,16 @@ Note that the `lint` script is run prior to `build`. Auto-fixable linting or for
 1.  Run the tests: `npm t`
 1.  Test coverage can be viewed at `/coverage/lcov-report/index.html`
 
+### Publish a new package version
+
+1. Create new version
+   1. Navigate to the [version workflow](https://github.com/basketry/typescript-validators/actions/workflows/version.yml) from the Actions tab.
+   1. Manually dispatch the action with the appropriate inputs
+   1. This will create a PR with the new version
+1. Publish to NPM
+   1. Review and merge the PR
+   1. The [publish workflow](https://github.com/basketry/typescript-validators/actions/workflows/publish.yml) will create a git tag and publish the package on NPM
+
 ---
 
 Generated with [generator-ts-console](https://www.npmjs.com/package/generator-ts-console)
