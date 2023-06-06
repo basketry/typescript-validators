@@ -9,6 +9,7 @@
  * 2. Run the Basketry CLI
  *
  * About Basketry: https://github.com/basketry/basketry/wiki
+ * About @basketry/typescript-validators: https://github.com/basketry/typescript-validators
  */
 
 import * as types from './types';
