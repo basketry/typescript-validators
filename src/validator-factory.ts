@@ -387,7 +387,7 @@ export const buildStringMinLengthClause: GuardClauseFactory = (param, rule) => {
     const paramName = buildParameterName(param);
     const conditions = buildConditions(param, (name) => [
       `typeof ${name} === 'string'`,
-      `$${name}.length < ${rule.length.value}`,
+      `${name}.length < ${rule.length.value}`,
     ]);
 
     return `if(${conditions.join(' && ')}) {${buildError(
