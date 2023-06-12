@@ -4,6 +4,7 @@ import {
   File,
   hasOnlyOptionalParameters,
   hasParameters,
+  HttpParameter,
   isRequired,
   Method,
   Parameter,
@@ -22,13 +23,22 @@ import {
 import {
   buildMethodName,
   buildMethodParams,
-  buildParameterName,
+  buildParameterName as originalBuildParameterName,
+  buildPropertyName,
   buildRootTypeName,
   buildTypeName,
 } from '@basketry/typescript';
 import { eslintDisable, format, from } from '@basketry/typescript/lib/utils';
 
 import { NamespacedTypescriptOptions } from '@basketry/typescript/lib/types';
+
+function buildParameterName(
+  param: Property | Parameter | HttpParameter,
+): string {
+  return param.kind === 'Parameter' || param.kind === 'HttpParameter'
+    ? originalBuildParameterName(param)
+    : buildPropertyName(param);
+}
 
 export type GuardClauseFactory = (
   param: Parameter | Property,
@@ -205,7 +215,9 @@ export class ValidatorFactory {
 
     yield 'const errors: ValidationError[] = [];';
 
-    const values = `[${e.values.map((v) => `"${v.value}"`).join(', ')}]`;
+    const values = `[${e.values
+      .map((v) => `"${v.content.value}"`)
+      .join(', ')}]`;
 
     const conditions = [
       `typeof value === 'string'`,
@@ -245,7 +257,7 @@ function buildError(id: string, title: string, path: string): string {
 }
 
 function buildConditions(
-  param: Parameter,
+  param: Parameter | Property,
   conditions: (n: string) => string[],
 ): string[] {
   const paramName = buildParameterName(param);
