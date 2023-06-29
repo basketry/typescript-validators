@@ -14,7 +14,19 @@
 
 import * as types from './types';
 
-export type ValidationError = { code: string; title: string; path: string };
+export type ValidationError = {
+  code:
+    | 'ARRAY_MAX_ITEMS'
+    | 'ARRAY_MIN_ITEMS'
+    | 'NUMBER_MULTIPLE_OF'
+    | 'REQUIRED'
+    | 'STRING_ENUM'
+    | 'STRING_MAX_LENGTH'
+    | 'STRING_PATTERN'
+    | 'TYPE';
+  title: string;
+  path: string;
+};
 
 /**
  * Validates input parameters for the allAuthSchemes() method.
@@ -79,33 +91,36 @@ export function validateExhaustiveFormatsParams(params?: {
   if (
     typeof params.integerNoFormat !== 'undefined' &&
     (typeof params.integerNoFormat !== 'number' ||
+      params.integerNoFormat % 1 ||
       Number.isNaN(params.integerNoFormat))
   ) {
     errors.push({
       code: 'TYPE',
-      title: '"integerNoFormat" must be a number if supplied',
+      title: '"integerNoFormat" must be an integer if supplied',
       path: 'integerNoFormat',
     });
   }
   if (
     typeof params.integerInt32 !== 'undefined' &&
     (typeof params.integerInt32 !== 'number' ||
+      params.integerInt32 % 1 ||
       Number.isNaN(params.integerInt32))
   ) {
     errors.push({
       code: 'TYPE',
-      title: '"integerInt32" must be a number if supplied',
+      title: '"integerInt32" must be an integer if supplied',
       path: 'integerInt32',
     });
   }
   if (
     typeof params.integerInt64 !== 'undefined' &&
     (typeof params.integerInt64 !== 'number' ||
+      params.integerInt64 % 1 ||
       Number.isNaN(params.integerInt64))
   ) {
     errors.push({
       code: 'TYPE',
-      title: '"integerInt64" must be a number if supplied',
+      title: '"integerInt64" must be an integer if supplied',
       path: 'integerInt64',
     });
   }
@@ -217,11 +232,12 @@ export function validateExhaustiveParamsParams(params: {
   if (
     typeof params.queryInteger !== 'undefined' &&
     (typeof params.queryInteger !== 'number' ||
+      params.queryInteger % 1 ||
       Number.isNaN(params.queryInteger))
   ) {
     errors.push({
       code: 'TYPE',
-      title: '"queryInteger" must be a number if supplied',
+      title: '"queryInteger" must be an integer if supplied',
       path: 'queryInteger',
     });
   }
@@ -278,12 +294,12 @@ export function validateExhaustiveParamsParams(params: {
   if (
     Array.isArray(params.queryIntegerArray) &&
     params.queryIntegerArray.some(
-      (x) => typeof x !== 'number' || Number.isNaN(x),
+      (x) => typeof x !== 'number' || x % 1 || Number.isNaN(x),
     )
   ) {
     errors.push({
       code: 'TYPE',
-      title: 'Each item in "queryIntegerArray" must be a number if supplied',
+      title: 'Each item in "queryIntegerArray" must be an integer if supplied',
       path: 'queryIntegerArray',
     });
   }
@@ -360,11 +376,13 @@ export function validateExhaustiveParamsParams(params: {
   }
   if (
     typeof params.pathInteger !== 'undefined' &&
-    (typeof params.pathInteger !== 'number' || Number.isNaN(params.pathInteger))
+    (typeof params.pathInteger !== 'number' ||
+      params.pathInteger % 1 ||
+      Number.isNaN(params.pathInteger))
   ) {
     errors.push({
       code: 'TYPE',
-      title: '"pathInteger" must be a number',
+      title: '"pathInteger" must be an integer',
       path: 'pathInteger',
     });
   }
@@ -454,12 +472,12 @@ export function validateExhaustiveParamsParams(params: {
   if (
     Array.isArray(params.pathIntegerArray) &&
     params.pathIntegerArray.some(
-      (x) => typeof x !== 'number' || Number.isNaN(x),
+      (x) => typeof x !== 'number' || x % 1 || Number.isNaN(x),
     )
   ) {
     errors.push({
       code: 'TYPE',
-      title: 'Each item in "pathIntegerArray" must be a number',
+      title: 'Each item in "pathIntegerArray" must be an integer',
       path: 'pathIntegerArray',
     });
   }
@@ -517,11 +535,12 @@ export function validateExhaustiveParamsParams(params: {
   if (
     typeof params.headerInteger !== 'undefined' &&
     (typeof params.headerInteger !== 'number' ||
+      params.headerInteger % 1 ||
       Number.isNaN(params.headerInteger))
   ) {
     errors.push({
       code: 'TYPE',
-      title: '"headerInteger" must be a number if supplied',
+      title: '"headerInteger" must be an integer if supplied',
       path: 'headerInteger',
     });
   }
@@ -578,12 +597,12 @@ export function validateExhaustiveParamsParams(params: {
   if (
     Array.isArray(params.headerIntegerArray) &&
     params.headerIntegerArray.some(
-      (x) => typeof x !== 'number' || Number.isNaN(x),
+      (x) => typeof x !== 'number' || x % 1 || Number.isNaN(x),
     )
   ) {
     errors.push({
       code: 'TYPE',
-      title: 'Each item in "headerIntegerArray" must be a number if supplied',
+      title: 'Each item in "headerIntegerArray" must be an integer if supplied',
       path: 'headerIntegerArray',
     });
   }

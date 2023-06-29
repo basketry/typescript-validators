@@ -49,14 +49,12 @@ export class ValidatorFactory {
   public readonly target = 'typescript';
 
   constructor(
-    private readonly factories: GuardClauseFactory[],
     private readonly service: Service,
     private readonly options?: NamespacedTypescriptOptions,
   ) {}
 
   build(): File[] {
     const imports = Array.from(this.buildImports()).join('\n');
-    const standardTypes = Array.from(this.buildStandardTypes()).join('\n');
 
     const methodParams = this.service.interfaces
       .map((int) => int.methods)
@@ -92,6 +90,9 @@ export class ValidatorFactory {
 
     const disable = from(eslintDisable(this.options || {}));
 
+    // Needs to be at the end so that we can capture all error code enum values
+    const standardTypes = Array.from(this.buildStandardTypes()).join('\n');
+
     const contents = [
       header,
       disable,
@@ -116,8 +117,13 @@ export class ValidatorFactory {
     }* as types from "./types"`;
   }
 
+  private readonly codes = new Set<string>();
   private *buildStandardTypes(): Iterable<string> {
-    yield 'export type ValidationError = { code: string, title: string, path: string };';
+    const codes = Array.from(this.codes)
+      .sort((a, b) => a.localeCompare(b))
+      .map((code) => `'${code}'`)
+      .join(' | ');
+    yield `export type ValidationError = { code: ${codes}, title: string, path: string };`;
   }
 
   private *buildMethodParamsValidator(
@@ -138,9 +144,9 @@ export class ValidatorFactory {
     }
 
     for (const param of method.parameters) {
-      yield buildRequiredClause(param);
-      yield buildPrimitiveTypeClause(param);
-      yield buildCustomTypeClause(param);
+      yield this.buildRequiredClause(param);
+      yield this.buildPrimitiveTypeClause(param);
+      yield this.buildCustomTypeClause(param);
 
       for (const rule of param.rules) {
         for (const factory of this.factories) {
@@ -174,9 +180,9 @@ export class ValidatorFactory {
     // }
 
     for (const property of type.properties) {
-      yield buildRequiredClause(property);
-      yield buildPrimitiveTypeClause(property);
-      yield buildCustomTypeClause(property);
+      yield this.buildRequiredClause(property);
+      yield this.buildPrimitiveTypeClause(property);
+      yield this.buildCustomTypeClause(property);
 
       for (const rule of property.rules) {
         for (const factory of this.factories) {
@@ -224,7 +230,7 @@ export class ValidatorFactory {
       `!${values}.includes(value)`,
     ];
 
-    yield `if(${conditions.join(' && ')}) {${buildError(
+    yield `if(${conditions.join(' && ')}) {${this.buildError(
       'string-enum',
       `Value must be one of ${values}`,
       '',
@@ -248,366 +254,363 @@ export class ValidatorFactory {
     )}() method.`;
     yield `${s} */`;
   }
-}
 
-function buildError(id: string, title: string, path: string): string {
-  return `errors.push({code: '${constant(
-    id,
-  )}', title: '${title}', path: '${path}' });`;
-}
-
-function buildConditions(
-  param: Parameter | Property,
-  conditions: (n: string) => string[],
-): string[] {
-  const paramName = buildParameterName(param);
-  if (param.isArray) {
-    return [
-      `Array.isArray(params.${paramName})`,
-      `!params.${paramName}.some((x) => ${conditions('x').join(' && ')})`,
-    ];
-  } else {
-    return conditions(`params.` + paramName);
+  private buildError(id: string, title: string, path: string): string {
+    const code = constant(id);
+    this.codes.add(code);
+    return `errors.push({code: '${code}', title: '${title}', path: '${path}' });`;
   }
-}
 
-function buildMessage(param: Parameter | Property, message: string): string {
-  return param.isArray ? `Each item in ${message}` : message;
-}
-
-function buildRequiredClause(param: Parameter | Property): string | undefined {
-  if (isRequired(param)) {
+  buildConditions(
+    param: Parameter | Property,
+    conditions: (n: string) => string[],
+  ): string[] {
     const paramName = buildParameterName(param);
-    return `if(typeof params.${paramName} === 'undefined') {${buildError(
-      'required',
-      `"${paramName}" is required`,
-      paramName,
-    )}}`;
+    if (param.isArray) {
+      return [
+        `Array.isArray(params.${paramName})`,
+        `!params.${paramName}.some((x) => ${conditions('x').join(' && ')})`,
+      ];
+    } else {
+      return conditions(`params.` + paramName);
+    }
   }
-  return;
-}
 
-function buildPrimitiveTypeClause(
-  param: Parameter | Property,
-): string | undefined {
-  if (param.isPrimitive && param.typeName.value !== 'untyped') {
-    const rootTypeName = buildRootTypeName(param, 'types');
-    const paramName = buildParameterName(param);
+  buildMessage(param: Parameter | Property, message: string): string {
+    return param.isArray ? `Each item in ${message}` : message;
+  }
 
-    const conditions: string[] = [];
+  buildRequiredClause(param: Parameter | Property): string | undefined {
+    if (isRequired(param)) {
+      const paramName = buildParameterName(param);
+      return `if(typeof params.${paramName} === 'undefined') {${this.buildError(
+        'required',
+        `"${paramName}" is required`,
+        paramName,
+      )}}`;
+    }
+    return;
+  }
 
-    const rootCondition = (variable: string) => {
-      if (
-        param.typeName.value === 'date' ||
-        param.typeName.value === 'date-time'
-      ) {
-        return `!(${variable} instanceof Date)`;
+  buildPrimitiveTypeClause(param: Parameter | Property): string | undefined {
+    if (param.isPrimitive && param.typeName.value !== 'untyped') {
+      const rootTypeName = buildRootTypeName(param, 'types');
+      const paramName = buildParameterName(param);
+
+      const conditions: string[] = [];
+
+      const rootCondition = (variable: string) => {
+        if (
+          param.typeName.value === 'date' ||
+          param.typeName.value === 'date-time'
+        ) {
+          return `!(${variable} instanceof Date)`;
+        } else if (
+          param.typeName.value === 'integer' ||
+          param.typeName.value === 'long'
+        ) {
+          return `typeof ${variable} !== '${rootTypeName}' || ${variable} % 1`;
+        } else {
+          return `typeof ${variable} !== '${rootTypeName}'`;
+        }
+      };
+
+      if (param.isArray) {
+        conditions.push(
+          ...[
+            `Array.isArray(params.${paramName})`,
+            `params.${paramName}.some(x => ${rootCondition('x')}${
+              rootTypeName === 'number' ? ' || Number.isNaN(x)' : ''
+            })`,
+          ],
+        );
       } else {
-        return `typeof ${variable} !== '${rootTypeName}'`;
+        conditions.push(
+          ...[
+            `typeof params.${paramName} !== 'undefined'`,
+            `(${rootCondition(`params.${paramName}`)}${
+              rootTypeName === 'number'
+                ? ` || Number.isNaN(params.${paramName})`
+                : ''
+            })`,
+          ],
+        );
       }
-    };
 
-    if (param.isArray) {
-      conditions.push(
-        ...[
-          `Array.isArray(params.${paramName})`,
-          `params.${paramName}.some(x => ${rootCondition('x')}${
-            rootTypeName === 'number' ? ' || Number.isNaN(x)' : ''
-          })`,
-        ],
-      );
-    } else {
-      conditions.push(
-        ...[
-          `typeof params.${paramName} !== 'undefined'`,
-          `(${rootCondition(`params.${paramName}`)}${
-            rootTypeName === 'number'
-              ? ` || Number.isNaN(params.${paramName})`
-              : ''
-          })`,
-        ],
-      );
+      const requiredType =
+        param.typeName.value === 'integer' || param.typeName.value === 'long'
+          ? 'an integer'
+          : `a ${rootTypeName}`;
+
+      const message = `"${paramName}" must be ${requiredType}`;
+
+      return `if(${conditions.join(' && ')}) {${this.buildError(
+        'type',
+        this.buildMessage(
+          param,
+          `${message}${isRequired(param) ? '' : ` if supplied`}`,
+        ),
+        paramName,
+      )}}`;
     }
-
-    const message = `"${paramName}" must be a ${rootTypeName}`;
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      'type',
-      buildMessage(
-        param,
-        `${message}${isRequired(param) ? '' : ` if supplied`}`,
-      ),
-      paramName,
-    )}}`;
+    return;
   }
-  return;
-}
 
-function buildCustomTypeClause(
-  param: Parameter | Property,
-): string | undefined {
-  if (!param.isPrimitive) {
-    const typeValidatorName = buildTypeValidatorName(param);
-    const paramName = buildParameterName(param);
-    if (param.isArray) {
-      return `if(typeof params.${paramName} !== 'undefined') {params.${paramName}.forEach( arrayItem => errors.push(...${typeValidatorName}(arrayItem)));}`;
-    } else {
-      return `if(typeof params.${paramName} !== 'undefined') { errors.push(...${typeValidatorName}(params.${paramName})); }`;
+  buildCustomTypeClause(param: Parameter | Property): string | undefined {
+    if (!param.isPrimitive) {
+      const typeValidatorName = buildTypeValidatorName(param);
+      const paramName = buildParameterName(param);
+      if (param.isArray) {
+        return `if(typeof params.${paramName} !== 'undefined') {params.${paramName}.forEach( arrayItem => errors.push(...${typeValidatorName}(arrayItem)));}`;
+      } else {
+        return `if(typeof params.${paramName} !== 'undefined') { errors.push(...${typeValidatorName}(params.${paramName})); }`;
+      }
     }
+    return;
   }
-  return;
+
+  buildStringEnumRuleClause: GuardClauseFactory = (param, rule) => {
+    if (rule.id === 'string-enum') {
+      const paramName = buildParameterName(param);
+      const values = `[${rule.values.map((v) => `"${v.value}"`).join(', ')}]`;
+
+      const conditions = this.buildConditions(param, (name) => [
+        `typeof ${name} === 'string'`,
+        `!${values}.includes(${name})`,
+      ]);
+
+      return `if(${conditions.join(' && ')}) {${this.buildError(
+        rule.id,
+        this.buildMessage(param, `"${paramName}" must be one of ${values}`),
+        paramName,
+      )}}`;
+    }
+    return;
+  };
+
+  buildStringMaxLengthClause: GuardClauseFactory = (param, rule) => {
+    if (rule.id === 'string-max-length') {
+      const paramName = buildParameterName(param);
+      const conditions = this.buildConditions(param, (name) => [
+        `typeof ${name} === 'string'`,
+        `${name}.length > ${rule.length.value}`,
+      ]);
+
+      return `if(${conditions.join(' && ')}) {${this.buildError(
+        rule.id,
+        this.buildMessage(
+          param,
+          `"${paramName}" max length is ${rule.length.value}`,
+        ),
+        paramName,
+      )}}`;
+    }
+    return;
+  };
+
+  buildStringMinLengthClause: GuardClauseFactory = (param, rule) => {
+    if (rule.id === 'string-min-length') {
+      const paramName = buildParameterName(param);
+      const conditions = this.buildConditions(param, (name) => [
+        `typeof ${name} === 'string'`,
+        `${name}.length < ${rule.length.value}`,
+      ]);
+
+      return `if(${conditions.join(' && ')}) {${this.buildError(
+        rule.id,
+        this.buildMessage(
+          param,
+          `"${paramName}" min length is ${rule.length.value}`,
+        ),
+        paramName,
+      )}}`;
+    }
+    return;
+  };
+
+  buildStringPatternClause: GuardClauseFactory = (param, rule) => {
+    if (rule.id === 'string-pattern') {
+      const paramName = buildParameterName(param);
+      const conditions = this.buildConditions(param, (name) => [
+        `typeof ${name} === 'string'`,
+        `/${rule.pattern.value}/.test(${name})`,
+      ]);
+
+      return `if(${conditions.join(' && ')}) {${this.buildError(
+        rule.id,
+        this.buildMessage(
+          param,
+          `"${paramName}" must match the pattern /${rule.pattern.value}/`,
+        ),
+        paramName,
+      )}}`;
+    }
+    return;
+  };
+
+  buildNumberMultipleOfClause: GuardClauseFactory = (param, rule) => {
+    if (rule.id === 'number-multiple-of') {
+      const paramName = buildParameterName(param);
+      const conditions = this.buildConditions(param, (name) => [
+        `typeof ${name} === 'number'`,
+        `${name} % ${rule.value.value} !== 0`,
+      ]);
+
+      return `if(${conditions.join(' && ')}) {${this.buildError(
+        rule.id,
+        this.buildMessage(
+          param,
+          `"${paramName}" must be a multiple of ${rule.value.value}`,
+        ),
+        paramName,
+      )}}`;
+    }
+    return;
+  };
+
+  buildNumberGreaterThanClause: GuardClauseFactory = (param, rule) => {
+    if (rule.id === 'number-gt') {
+      const paramName = buildParameterName(param);
+      const conditions = this.buildConditions(param, (name) => [
+        `typeof ${name} === 'number'`,
+        `${name} <= ${rule.value.value}`,
+      ]);
+
+      return `if(${conditions.join(' && ')}) {${this.buildError(
+        rule.id,
+        this.buildMessage(
+          param,
+          `"${paramName}" must be greater than ${rule.value.value}`,
+        ),
+        paramName,
+      )}}`;
+    }
+    return;
+  };
+
+  buildNumberGreaterOrEqualClause: GuardClauseFactory = (param, rule) => {
+    if (rule.id === 'number-gte') {
+      const paramName = buildParameterName(param);
+      const conditions = this.buildConditions(param, (name) => [
+        `typeof ${name} === 'number'`,
+        `${name} < ${rule.value.value}`,
+      ]);
+
+      return `if(${conditions.join(' && ')}) {${this.buildError(
+        rule.id,
+        this.buildMessage(
+          param,
+          `"${paramName}" must be greater than or equal to ${rule.value.value}`,
+        ),
+        paramName,
+      )}}`;
+    }
+    return;
+  };
+
+  buildNumberLessThanClause: GuardClauseFactory = (param, rule) => {
+    if (rule.id === 'number-lt') {
+      const paramName = buildParameterName(param);
+      const conditions = this.buildConditions(param, (name) => [
+        `typeof ${name} === 'number'`,
+        `${name} >= ${rule.value.value}`,
+      ]);
+
+      return `if(${conditions.join(' && ')}) {${this.buildError(
+        rule.id,
+        this.buildMessage(
+          param,
+          `"${paramName}" must be less than ${rule.value.value}`,
+        ),
+        paramName,
+      )}}`;
+    }
+    return;
+  };
+
+  buildNumberLessOrEqualClause: GuardClauseFactory = (param, rule) => {
+    if (rule.id === 'number-lte') {
+      const paramName = buildParameterName(param);
+      const conditions = this.buildConditions(param, (name) => [
+        `typeof ${name} === 'number'`,
+        `${name} > ${rule.value.value}`,
+      ]);
+
+      return `if(${conditions.join(' && ')}) {${this.buildError(
+        rule.id,
+        this.buildMessage(
+          param,
+          `"${paramName}" must be less than or equal to ${rule.value.value}`,
+        ),
+        paramName,
+      )}}`;
+    }
+    return;
+  };
+
+  buildArrayMaxItemsClause: GuardClauseFactory = (param, rule) => {
+    if (rule.id === 'array-max-items') {
+      const paramName = buildParameterName(param);
+      const conditions = [
+        `Array.isArray(params.${paramName})`,
+        `params.${paramName}.length > ${rule.max.value}`,
+      ];
+
+      return `if(${conditions.join(' && ')}) {${this.buildError(
+        rule.id,
+        `"${paramName}" max length is ${rule.max.value}`,
+        paramName,
+      )}}`;
+    }
+    return;
+  };
+
+  buildArrayMinItemsClause: GuardClauseFactory = (param, rule) => {
+    if (rule.id === 'array-min-items') {
+      const paramName = buildParameterName(param);
+      const conditions = [
+        `Array.isArray(params.${paramName})`,
+        `params.${paramName}.length < ${rule.min.value}`,
+      ];
+
+      return `if(${conditions.join(' && ')}) {${this.buildError(
+        rule.id,
+        `"${paramName}" min length is ${rule.min.value}`,
+        paramName,
+      )}}`;
+    }
+    return;
+  };
+
+  buildArrayUniqueItemsClause: GuardClauseFactory = (param, rule) => {
+    if (rule.id === 'array-unique-items') {
+      const paramName = buildParameterName(param);
+      const conditions = [
+        `Array.isArray(params.${paramName})`,
+        `params.${param.name.value}.length === new Set(${paramName}).length`,
+      ];
+
+      return `if(${conditions.join(' && ')}) {${this.buildError(
+        rule.id,
+        `"${paramName}" must contain unique values`,
+        paramName,
+      )}}`;
+    }
+    return;
+  };
+
+  private readonly factories = [
+    this.buildStringEnumRuleClause.bind(this),
+    this.buildStringMaxLengthClause.bind(this),
+    this.buildStringMinLengthClause.bind(this),
+    this.buildStringPatternClause.bind(this),
+    this.buildNumberMultipleOfClause.bind(this),
+    this.buildNumberGreaterThanClause.bind(this),
+    this.buildNumberGreaterOrEqualClause.bind(this),
+    this.buildNumberLessThanClause.bind(this),
+    this.buildNumberLessOrEqualClause.bind(this),
+    this.buildArrayMaxItemsClause.bind(this),
+    this.buildArrayMinItemsClause.bind(this),
+    this.buildArrayUniqueItemsClause.bind(this),
+  ];
 }
-
-export const buildStringEnumRuleClause: GuardClauseFactory = (param, rule) => {
-  if (rule.id === 'string-enum') {
-    const paramName = buildParameterName(param);
-    const values = `[${rule.values.map((v) => `"${v.value}"`).join(', ')}]`;
-
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'string'`,
-      `!${values}.includes(${name})`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(param, `"${paramName}" must be one of ${values}`),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildStringMaxLengthClause: GuardClauseFactory = (param, rule) => {
-  if (rule.id === 'string-max-length') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'string'`,
-      `${name}.length > ${rule.length.value}`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(param, `"${paramName}" max length is ${rule.length.value}`),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildStringMinLengthClause: GuardClauseFactory = (param, rule) => {
-  if (rule.id === 'string-min-length') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'string'`,
-      `${name}.length < ${rule.length.value}`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(param, `"${paramName}" min length is ${rule.length.value}`),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildStringPatternClause: GuardClauseFactory = (param, rule) => {
-  if (rule.id === 'string-pattern') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'string'`,
-      `/${rule.pattern.value}/.test(${name})`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(
-        param,
-        `"${paramName}" must match the pattern /${rule.pattern.value}/`,
-      ),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildNumberMultipleOfClause: GuardClauseFactory = (
-  param,
-  rule,
-) => {
-  if (rule.id === 'number-multiple-of') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'number'`,
-      `${name} % ${rule.value.value} !== 0`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(
-        param,
-        `"${paramName}" must be a multiple of ${rule.value.value}`,
-      ),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildNumberGreaterThanClause: GuardClauseFactory = (
-  param,
-  rule,
-) => {
-  if (rule.id === 'number-gt') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'number'`,
-      `${name} <= ${rule.value.value}`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(
-        param,
-        `"${paramName}" must be greater than ${rule.value.value}`,
-      ),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildNumberGreaterOrEqualClause: GuardClauseFactory = (
-  param,
-  rule,
-) => {
-  if (rule.id === 'number-gte') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'number'`,
-      `${name} < ${rule.value.value}`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(
-        param,
-        `"${paramName}" must be greater than or equal to ${rule.value.value}`,
-      ),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildNumberLessThanClause: GuardClauseFactory = (param, rule) => {
-  if (rule.id === 'number-lt') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'number'`,
-      `${name} >= ${rule.value.value}`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(
-        param,
-        `"${paramName}" must be less than ${rule.value.value}`,
-      ),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildNumberLessOrEqualClause: GuardClauseFactory = (
-  param,
-  rule,
-) => {
-  if (rule.id === 'number-lte') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'number'`,
-      `${name} > ${rule.value.value}`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(
-        param,
-        `"${paramName}" must be less than or equal to ${rule.value.value}`,
-      ),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildArrayMaxItemsClause: GuardClauseFactory = (param, rule) => {
-  if (rule.id === 'array-max-items') {
-    const paramName = buildParameterName(param);
-    const conditions = [
-      `Array.isArray(params.${paramName})`,
-      `params.${paramName}.length > ${rule.max.value}`,
-    ];
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      `"${paramName}" max length is ${rule.max.value}`,
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildArrayMinItemsClause: GuardClauseFactory = (param, rule) => {
-  if (rule.id === 'array-min-items') {
-    const paramName = buildParameterName(param);
-    const conditions = [
-      `Array.isArray(params.${paramName})`,
-      `params.${paramName}.length < ${rule.min.value}`,
-    ];
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      `"${paramName}" min length is ${rule.min.value}`,
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildArrayUniqueItemsClause: GuardClauseFactory = (
-  param,
-  rule,
-) => {
-  if (rule.id === 'array-unique-items') {
-    const paramName = buildParameterName(param);
-    const conditions = [
-      `Array.isArray(params.${paramName})`,
-      `params.${param.name.value}.length === new Set(${paramName}).length`,
-    ];
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      `"${paramName}" must contain unique values`,
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const defaultFactories = [
-  buildStringEnumRuleClause,
-  buildStringMaxLengthClause,
-  buildStringMinLengthClause,
-  buildStringPatternClause,
-  buildNumberMultipleOfClause,
-  buildNumberGreaterThanClause,
-  buildNumberGreaterOrEqualClause,
-  buildNumberLessThanClause,
-  buildNumberLessOrEqualClause,
-  buildArrayMaxItemsClause,
-  buildArrayMinItemsClause,
-  buildArrayUniqueItemsClause,
-];
