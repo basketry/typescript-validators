@@ -1,7 +1,7 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import generateTypes from '@basketry/typescript';
-import { defaultFactories, ValidatorFactory } from '../validator-factory';
+import { ValidatorFactory } from '../validator-factory';
 
 const pkg = require('../../package.json');
 const withVersion = `${pkg.name}@${pkg.version}`;
@@ -11,7 +11,7 @@ const service = require('basketry/lib/example-ir.json');
 
 const snapshotFiles = [
   ...generateTypes(service),
-  ...new ValidatorFactory(defaultFactories, service).build(),
+  ...new ValidatorFactory(service).build(),
 ];
 
 for (const file of snapshotFiles) {
