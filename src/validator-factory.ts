@@ -1,7 +1,8 @@
-import { constant } from 'case';
+import { camel, constant, pascal } from 'case';
 import {
   Enum,
   File,
+  getTypeByName,
   hasOnlyOptionalParameters,
   hasParameters,
   HttpParameter,
@@ -9,6 +10,7 @@ import {
   Method,
   Parameter,
   Property,
+  Scalar,
   Service,
   Type,
   ValidationRule,
@@ -27,10 +29,10 @@ import {
   buildPropertyName,
   buildRootTypeName,
   buildTypeName,
+  buildInterfaceName,
 } from '@basketry/typescript';
 import { eslintDisable, format, from } from '@basketry/typescript/lib/utils';
-
-import { NamespacedTypescriptOptions } from '@basketry/typescript/lib/types';
+import { NamespacedTypescriptValidatorsOptions } from './types';
 
 function buildParameterName(
   param: Property | Parameter | HttpParameter,
@@ -50,7 +52,7 @@ export class ValidatorFactory {
 
   constructor(
     private readonly service: Service,
-    private readonly options?: NamespacedTypescriptOptions,
+    private readonly options?: NamespacedTypescriptValidatorsOptions,
   ) {}
 
   build(): File[] {
@@ -101,6 +103,7 @@ export class ValidatorFactory {
       methodParams,
       types,
       enums,
+      Array.from(this.buildValidatedServiceWrappers()).join('\n'),
     ].join('\n\n');
 
     return [
@@ -114,7 +117,13 @@ export class ValidatorFactory {
   private *buildImports(): Iterable<string> {
     yield `import${
       this.options?.typescript?.typeImports ? ' type ' : ' '
-    }* as types from "./types"`;
+    }* as types from "${
+      this.options?.typescriptValidators?.typesImportPath ?? './types'
+    }"`;
+
+    yield `import ${
+      this.options?.typescript?.typeImports ? ' type ' : ' '
+    } * as sanitizers from "./sanitizers"`;
   }
 
   private readonly codes = new Set<string>();
@@ -259,6 +268,121 @@ export class ValidatorFactory {
     const code = constant(id);
     this.codes.add(code);
     return `errors.push({code: '${code}', title: '${title}', path: '${path}' });`;
+  }
+
+  private *buildValidatedServiceWrappers(): Iterable<string> {
+    yield `export type ResponseBuilder<T> = (validationErrors: ValidationError[], err: any) => T`;
+    for (const int of sort(this.service.interfaces)) {
+      const returnTypes = sort(
+        Array.from(
+          new Set(
+            int.methods
+              .map((m) =>
+                getTypeByName(this.service, m.returnType?.typeName.value),
+              )
+              .filter((t): t is Type => !!t),
+          ),
+        ),
+      );
+
+      const hasVoid = int.methods.some((m) => !m.returnType);
+
+      const handlers = returnTypes.map(
+        (type) =>
+          `${camel(
+            `build_${type.name.value}`,
+          )}: ResponseBuilder<${buildTypeName(type, 'types')}>`,
+      );
+      if (hasVoid) {
+        handlers.push('buildVoid: ResponseBuilder<void>');
+      }
+
+      const handlersType = `{${handlers.join(',')}}`;
+
+      const intName = buildInterfaceName(int, 'types');
+      yield `export class ${pascal(
+        `validated_${int.name.value}_service`,
+      )} implements ${buildInterfaceName(int, 'types')} {`;
+      yield `constructor(private readonly service: ${intName}, private readonly handlers: ${handlersType}){}`;
+      yield '';
+      for (const method of sort(int.methods)) {
+        const methodName = buildMethodName(method);
+        const returnType = getTypeByName(
+          this.service,
+          method.returnType?.typeName.value,
+        );
+
+        const sanitize = (call: string, isAsync: boolean): string => {
+          if (returnType) {
+            return `sanitizers.${camel(`sanitize_${returnType.name.value}`)}(${
+              isAsync ? 'await' : ''
+            } ${call})`;
+          } else {
+            return call;
+          }
+        };
+
+        const sanitizeAsync = (call: string): string => {
+          return sanitize(call, true);
+        };
+
+        const sanitizeSync = (call: string): string => {
+          return sanitize(call, false);
+        };
+
+        const handlerName = returnType
+          ? `this.handlers.${camel(`build_${returnType.name.value}`)}`
+          : 'this.handlers.buildVoid';
+
+        const hasParams = !!method.parameters.length;
+        const hasRequiredParams = method.parameters.some(isRequired);
+        const paramDef = method.parameters.length
+          ? `params${
+              hasRequiredParams ? '' : '?'
+            }: Parameters<${intName}['${methodName}']>[0]`
+          : '';
+        yield `async ${methodName}(${paramDef}) {`;
+        yield `${
+          hasParams ? 'let' : 'const'
+        } validationErrors: ValidationError[] = [];`;
+        yield 'try {';
+        if (hasParams) {
+          yield `validationErrors = ${buildParamsValidatorName(
+            method,
+          )}(params)`;
+          yield `if(validationErrors.length) {`;
+          if (returnType) {
+            yield `return ${sanitizeSync(
+              `${handlerName}(validationErrors, undefined)`,
+            )}`;
+          } else {
+            yield `return ${handlerName}(validationErrors, undefined)`;
+          }
+          yield '}';
+        }
+        if (hasParams) {
+          yield `const sanitizedParams = sanitizers.${camel(
+            `sanitize_${method.name.value}_params`,
+          )}(params)`;
+        }
+        yield `return ${sanitizeAsync(
+          `this.service.${methodName}(${hasParams ? 'sanitizedParams' : ''})`,
+        )}`;
+        yield '} catch (err) {';
+        if (returnType) {
+          yield `return ${sanitizeSync(
+            `${handlerName}(validationErrors, err)`,
+          )}`;
+        } else {
+          yield `return ${handlerName}(validationErrors, err)`;
+        }
+        yield '}';
+        yield '}';
+        yield '';
+      }
+      yield '}';
+      yield '';
+    }
   }
 
   buildConditions(
@@ -613,4 +737,8 @@ export class ValidatorFactory {
     this.buildArrayMinItemsClause.bind(this),
     this.buildArrayUniqueItemsClause.bind(this),
   ];
+}
+
+function sort<T extends { name: Scalar<string> }>(arr: T[]): T[] {
+  return [...arr].sort((a, b) => a.name.value.localeCompare(b.name.value));
 }
