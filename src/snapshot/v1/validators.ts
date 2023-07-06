@@ -13,6 +13,7 @@
  */
 
 import * as types from './types';
+import * as sanitizers from './sanitizers';
 
 export type ValidationError = {
   code:
@@ -1308,4 +1309,229 @@ export function validateProductSize(
     });
   }
   return [];
+}
+
+export type ResponseBuilder<T> = (
+  validationErrors: ValidationError[],
+  err: any,
+) => T;
+export class ValidatedAuthPermutationService
+  implements types.AuthPermutationService
+{
+  constructor(
+    private readonly service: types.AuthPermutationService,
+    private readonly handlers: { buildVoid: ResponseBuilder<void> },
+  ) {}
+
+  async allAuthSchemes() {
+    const validationErrors: ValidationError[] = [];
+    try {
+      return this.service.allAuthSchemes();
+    } catch (err) {
+      return this.handlers.buildVoid(validationErrors, err);
+    }
+  }
+
+  async comboAuthSchemes() {
+    const validationErrors: ValidationError[] = [];
+    try {
+      return this.service.comboAuthSchemes();
+    } catch (err) {
+      return this.handlers.buildVoid(validationErrors, err);
+    }
+  }
+}
+
+export class ValidatedExhaustiveService implements types.ExhaustiveService {
+  constructor(
+    private readonly service: types.ExhaustiveService,
+    private readonly handlers: { buildVoid: ResponseBuilder<void> },
+  ) {}
+
+  async exhaustiveFormats(
+    params?: Parameters<types.ExhaustiveService['exhaustiveFormats']>[0],
+  ) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateExhaustiveFormatsParams(params);
+      if (validationErrors.length) {
+        return this.handlers.buildVoid(validationErrors, undefined);
+      }
+      const sanitizedParams =
+        sanitizers.sanitizeExhaustiveFormatsParams(params);
+      return this.service.exhaustiveFormats(sanitizedParams);
+    } catch (err) {
+      return this.handlers.buildVoid(validationErrors, err);
+    }
+  }
+
+  async exhaustiveParams(
+    params: Parameters<types.ExhaustiveService['exhaustiveParams']>[0],
+  ) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateExhaustiveParamsParams(params);
+      if (validationErrors.length) {
+        return this.handlers.buildVoid(validationErrors, undefined);
+      }
+      const sanitizedParams = sanitizers.sanitizeExhaustiveParamsParams(params);
+      return this.service.exhaustiveParams(sanitizedParams);
+    } catch (err) {
+      return this.handlers.buildVoid(validationErrors, err);
+    }
+  }
+}
+
+export class ValidatedGizmoService implements types.GizmoService {
+  constructor(
+    private readonly service: types.GizmoService,
+    private readonly handlers: {
+      buildGizmo: ResponseBuilder<types.Gizmo>;
+      buildGizmosResponse: ResponseBuilder<types.GizmosResponse>;
+    },
+  ) {}
+
+  async createGizmo(params?: Parameters<types.GizmoService['createGizmo']>[0]) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateCreateGizmoParams(params);
+      if (validationErrors.length) {
+        return sanitizers.sanitizeGizmo(
+          this.handlers.buildGizmo(validationErrors, undefined),
+        );
+      }
+      const sanitizedParams = sanitizers.sanitizeCreateGizmoParams(params);
+      return sanitizers.sanitizeGizmo(
+        await this.service.createGizmo(sanitizedParams),
+      );
+    } catch (err) {
+      return sanitizers.sanitizeGizmo(
+        this.handlers.buildGizmo(validationErrors, err),
+      );
+    }
+  }
+
+  async getGizmos(params?: Parameters<types.GizmoService['getGizmos']>[0]) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateGetGizmosParams(params);
+      if (validationErrors.length) {
+        return sanitizers.sanitizeGizmosResponse(
+          this.handlers.buildGizmosResponse(validationErrors, undefined),
+        );
+      }
+      const sanitizedParams = sanitizers.sanitizeGetGizmosParams(params);
+      return sanitizers.sanitizeGizmosResponse(
+        await this.service.getGizmos(sanitizedParams),
+      );
+    } catch (err) {
+      return sanitizers.sanitizeGizmosResponse(
+        this.handlers.buildGizmosResponse(validationErrors, err),
+      );
+    }
+  }
+
+  async updateGizmo(params?: Parameters<types.GizmoService['updateGizmo']>[0]) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateUpdateGizmoParams(params);
+      if (validationErrors.length) {
+        return sanitizers.sanitizeGizmo(
+          this.handlers.buildGizmo(validationErrors, undefined),
+        );
+      }
+      const sanitizedParams = sanitizers.sanitizeUpdateGizmoParams(params);
+      return sanitizers.sanitizeGizmo(
+        await this.service.updateGizmo(sanitizedParams),
+      );
+    } catch (err) {
+      return sanitizers.sanitizeGizmo(
+        this.handlers.buildGizmo(validationErrors, err),
+      );
+    }
+  }
+}
+
+export class ValidatedWidgetService implements types.WidgetService {
+  constructor(
+    private readonly service: types.WidgetService,
+    private readonly handlers: {
+      buildWidget: ResponseBuilder<types.Widget>;
+      buildVoid: ResponseBuilder<void>;
+    },
+  ) {}
+
+  async createWidget(
+    params?: Parameters<types.WidgetService['createWidget']>[0],
+  ) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateCreateWidgetParams(params);
+      if (validationErrors.length) {
+        return this.handlers.buildVoid(validationErrors, undefined);
+      }
+      const sanitizedParams = sanitizers.sanitizeCreateWidgetParams(params);
+      return this.service.createWidget(sanitizedParams);
+    } catch (err) {
+      return this.handlers.buildVoid(validationErrors, err);
+    }
+  }
+
+  async deleteWidgetFoo(
+    params: Parameters<types.WidgetService['deleteWidgetFoo']>[0],
+  ) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateDeleteWidgetFooParams(params);
+      if (validationErrors.length) {
+        return this.handlers.buildVoid(validationErrors, undefined);
+      }
+      const sanitizedParams = sanitizers.sanitizeDeleteWidgetFooParams(params);
+      return this.service.deleteWidgetFoo(sanitizedParams);
+    } catch (err) {
+      return this.handlers.buildVoid(validationErrors, err);
+    }
+  }
+
+  async getWidgetFoo(
+    params: Parameters<types.WidgetService['getWidgetFoo']>[0],
+  ) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateGetWidgetFooParams(params);
+      if (validationErrors.length) {
+        return sanitizers.sanitizeWidget(
+          this.handlers.buildWidget(validationErrors, undefined),
+        );
+      }
+      const sanitizedParams = sanitizers.sanitizeGetWidgetFooParams(params);
+      return sanitizers.sanitizeWidget(
+        await this.service.getWidgetFoo(sanitizedParams),
+      );
+    } catch (err) {
+      return sanitizers.sanitizeWidget(
+        this.handlers.buildWidget(validationErrors, err),
+      );
+    }
+  }
+
+  async getWidgets() {
+    const validationErrors: ValidationError[] = [];
+    try {
+      return sanitizers.sanitizeWidget(await this.service.getWidgets());
+    } catch (err) {
+      return sanitizers.sanitizeWidget(
+        this.handlers.buildWidget(validationErrors, err),
+      );
+    }
+  }
+
+  async putWidget() {
+    const validationErrors: ValidationError[] = [];
+    try {
+      return this.service.putWidget();
+    } catch (err) {
+      return this.handlers.buildVoid(validationErrors, err);
+    }
+  }
 }
