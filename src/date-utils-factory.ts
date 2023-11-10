@@ -64,15 +64,25 @@ export class ConverterFactory {
     yield `...obj,`;
     for (const property of type.properties) {
       if (isDateProperty(property)) {
-        yield `${property.name.value}: tryConvertDate(obj.${property.name.value}),`;
+        if (property.isArray) {
+          yield `${property.name.value}: obj.${property.name.value}?.map(tryConvertDate),`;
+        } else {
+          yield `${property.name.value}: tryConvertDate(obj.${property.name.value}),`;
+        }
       } else {
         const subtype = getTypeByName(this.service, property.typeName.value);
         if (!subtype) continue;
 
         if (needsDateConversion(this.service, subtype)) {
-          yield `${property.name.value}: ${this.buildMethodName(subtype)}(obj.${
-            property.name.value
-          }),`;
+          if (property.isArray) {
+            yield `${property.name.value}: obj.${
+              property.name.value
+            }?.map(${this.buildMethodName(subtype)}),`;
+          } else {
+            yield `${property.name.value}: ${this.buildMethodName(
+              subtype,
+            )}(obj.${property.name.value}),`;
+          }
         }
       }
     }
