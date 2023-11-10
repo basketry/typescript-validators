@@ -38,7 +38,7 @@ export class ConverterFactory {
     }"`;
     yield '';
 
-    yield 'export function tryConvertDate(datish: any): any { if (datish instanceof Date) { return datish; } try { return new Date(datish); } catch { return datish; } }';
+    yield 'export function tryConvertDate(datish: any): any { if (datish instanceof Date) { return datish; } try { const date = new Date(datish); return Number.isNaN(date.valueOf()) ? datish : date; } catch { return datish; } }';
     yield '';
 
     for (const type of sort(this.service.types)) {
