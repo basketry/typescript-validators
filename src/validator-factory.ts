@@ -13,6 +13,7 @@ import {
   Scalar,
   Service,
   Type,
+  Union,
   ValidationRule,
 } from 'basketry';
 import { header as warning } from '@basketry/typescript/lib/warning';
@@ -84,6 +85,14 @@ export class ValidatorFactory {
       )
       .join('\n\n');
 
+    const unions = this.service.unions
+      .map((u) =>
+        Array.from(this.buildUnionValidator(u))
+          .filter((x) => x)
+          .join('\n'),
+      )
+      .join('\n\n');
+
     const header = warning(
       this.service,
       require('../package.json'),
@@ -103,6 +112,7 @@ export class ValidatorFactory {
       methodParams,
       types,
       enums,
+      unions,
       Array.from(this.buildValidatedServiceWrappers()).join('\n'),
     ].join('\n\n');
 
@@ -262,6 +272,29 @@ export class ValidatorFactory {
       method,
     )}() method.`;
     yield `${s} */`;
+  }
+
+  private *buildUnionValidator(union: Union): Iterable<string | undefined> {
+    yield `export function ${buildTypeValidatorName(
+      union,
+    )}(params: ${buildTypeName(union, 'types')}): ValidationError[] {`;
+    yield 'const errors: ValidationError[] = [];';
+
+    for (const member of union.members) {
+      if (!member.isPrimitive) {
+        const errorVariable = `${camel(member.typeName.value)}Errors`;
+        yield '\n';
+        yield `const ${errorVariable} = ${buildTypeValidatorName(
+          member,
+        )}(params)`;
+        yield `if(!${errorVariable}.length) return [];`;
+        yield `errors.push(...${errorVariable})`;
+        yield '\n';
+      }
+    }
+
+    yield `return errors;`;
+    yield `}`;
   }
 
   private buildError(id: string, title: string, path: string): string {

@@ -5,7 +5,9 @@ import {
   Scalar,
   Service,
   Type,
+  Union,
   getTypeByName,
+  getUnionByName,
   isRequired,
 } from 'basketry';
 import { format, from } from '@basketry/typescript/lib/utils';
@@ -37,8 +39,8 @@ export class SanitizerFactory {
     ];
   }
 
-  private buildMethodName(type: Type): string {
-    return camel(`sanitize_${type.name.value}`);
+  private buildMethodName(member: Type | Union): string {
+    return camel(`sanitize_${member.name.value}`);
   }
 
   private *buildFile(): Iterable<string> {
@@ -77,7 +79,8 @@ export class SanitizerFactory {
         const accessor = `obj.${name}`;
         const t = prop.isPrimitive
           ? undefined
-          : getTypeByName(this.service, prop.typeName.value);
+          : getTypeByName(this.service, prop.typeName.value) ??
+            getUnionByName(this.service, prop.typeName.value);
 
         if (t) {
           const method = this.buildMethodName(t);
@@ -102,6 +105,25 @@ export class SanitizerFactory {
       yield '';
 
       yield 'return stripUndefinedValues(sanitized)';
+
+      yield '}';
+      yield '';
+    }
+
+    for (const union of sort(this.service.unions)) {
+      yield `export function ${camel(
+        `sanitize_${union.name.value}`,
+      )}(obj: ${buildTypeName(union, 'types')}): ${buildTypeName(
+        union,
+        'types',
+      )} {`;
+
+      yield '  return stripUndefinedValues([';
+      // TODO: Handle primitive members
+      for (const member of union.members) {
+        yield `${camel(`sanitize_${member.typeName.value}`)}(obj),`;
+      }
+      yield '].reduce( (acc, val) => ({ ...acc, ...val }), {}));';
 
       yield '}';
       yield '';
