@@ -121,7 +121,9 @@ export class SanitizerFactory {
       yield '  return stripUndefinedValues([';
       // TODO: Handle primitive members
       for (const member of union.members) {
-        yield `${camel(`sanitize_${member.typeName.value}`)}(obj),`;
+        yield `${camel(
+          `sanitize_${member.typeName.value}`,
+        )}(obj as ${buildTypeName(member, 'types')}),`;
       }
       yield '].reduce( (acc, val) => ({ ...acc, ...val }), {}));';
 
