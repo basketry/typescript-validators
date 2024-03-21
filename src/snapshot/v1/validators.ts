@@ -1311,6 +1311,22 @@ export function validateProductSize(
   return [];
 }
 
+export function validateExampleUnion(
+  params: types.ExampleUnion,
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+
+  const gizmoErrors = validateGizmo(params as types.Gizmo);
+  if (!gizmoErrors.length) return [];
+  errors.push(...gizmoErrors);
+
+  const widgetErrors = validateWidget(params as types.Widget);
+  if (!widgetErrors.length) return [];
+  errors.push(...widgetErrors);
+
+  return errors;
+}
+
 export type ResponseBuilder<T> = (
   validationErrors: ValidationError[],
   err: any,

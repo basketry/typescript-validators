@@ -163,6 +163,17 @@ export function sanitizeWidgetFoo(obj: types.WidgetFoo): types.WidgetFoo {
   return stripUndefinedValues(sanitized);
 }
 
+export function sanitizeExampleUnion(
+  obj: types.ExampleUnion,
+): types.ExampleUnion {
+  return stripUndefinedValues(
+    [
+      sanitizeGizmo(obj as types.Gizmo),
+      sanitizeWidget(obj as types.Widget),
+    ].reduce((acc, val) => ({ ...acc, ...val }), {}),
+  );
+}
+
 export function sanitizeCreateGizmoParams(
   params?: Parameters<types.GizmoService['createGizmo']>[0],
 ): Parameters<types.GizmoService['createGizmo']>[0] {
