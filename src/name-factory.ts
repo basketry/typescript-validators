@@ -1,5 +1,14 @@
 import { buildTypeName } from '@basketry/typescript';
-import { Enum, Method, Parameter, Property, ReturnType, Type } from 'basketry';
+import {
+  Enum,
+  Method,
+  Parameter,
+  Property,
+  ReturnType,
+  Type,
+  TypedValue,
+  Union,
+} from 'basketry';
 import { camel } from 'case';
 
 function prefix(validatorModule: string | undefined, name: string) {
@@ -14,7 +23,7 @@ export function buildParamsValidatorName(
 }
 
 export function buildTypeValidatorName(
-  type: Type | Parameter | Property | ReturnType,
+  type: Type | Parameter | Property | ReturnType | Union | TypedValue,
   validatorModule?: string,
 ): string {
   return prefix(validatorModule, camel(`validate_${buildTypeName(type)}`));
