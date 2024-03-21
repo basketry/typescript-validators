@@ -189,4 +189,4 @@ export type WidgetFoo = {
   buzz: number;
 };
 
-export type ExampleUnion = Gizmo | string[];
+export type ExampleUnion = Gizmo | Widget;
