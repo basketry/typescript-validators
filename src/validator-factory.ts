@@ -286,7 +286,7 @@ export class ValidatorFactory {
         yield '\n';
         yield `const ${errorVariable} = ${buildTypeValidatorName(
           member,
-        )}(params)`;
+        )}(params as ${buildTypeName(member, 'types')})`;
         yield `if(!${errorVariable}.length) return [];`;
         yield `errors.push(...${errorVariable})`;
         yield '\n';
