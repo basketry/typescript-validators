@@ -31,6 +31,7 @@ import {
   buildRootTypeName,
   buildTypeName,
   buildInterfaceName,
+  buildFilePath,
 } from '@basketry/typescript';
 import { eslintDisable, format, from } from '@basketry/typescript/lib/utils';
 import { NamespacedTypescriptValidatorsOptions } from './types';
@@ -118,7 +119,7 @@ export class ValidatorFactory {
 
     return [
       {
-        path: [`v${this.service.majorVersion.value}`, 'validators.ts'],
+        path: buildFilePath(['validators.ts'], this.service, this.options),
         contents: format(contents, this.options),
       },
     ];

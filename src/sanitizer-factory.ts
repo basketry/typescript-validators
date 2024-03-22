@@ -14,6 +14,7 @@ import { format, from } from '@basketry/typescript/lib/utils';
 import { NamespacedTypescriptValidatorsOptions } from './types';
 import { camel, pascal } from 'case';
 import {
+  buildFilePath,
   buildInterfaceName,
   buildMethodName,
   buildParameterName,
@@ -33,7 +34,7 @@ export class SanitizerFactory {
   build(): File[] {
     return [
       {
-        path: [`v${this.service.majorVersion.value}`, 'sanitizers.ts'],
+        path: buildFilePath(['sanitizers.ts'], this.service, this.options),
         contents: format(from(this.buildFile()), this.options),
       },
     ];

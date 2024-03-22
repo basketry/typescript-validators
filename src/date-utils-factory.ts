@@ -8,6 +8,7 @@ import {
   isDateProperty,
   needsDateConversion,
 } from './utils';
+import { buildFilePath } from '@basketry/typescript';
 
 export class ConverterFactory {
   constructor(
@@ -20,7 +21,7 @@ export class ConverterFactory {
 
     return [
       {
-        path: [`v${this.service.majorVersion.value}`, 'date-utils.ts'],
+        path: buildFilePath(['date-utils.ts'], this.service, this.options),
         contents: format(from(this.buildFile()), this.options),
       },
     ];
