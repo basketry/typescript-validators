@@ -31,7 +31,6 @@ function compact<T extends object>(obj: T): T {
 export function sanitizeCreateWidgetBody(
   obj: types.CreateWidgetBody,
 ): types.CreateWidgetBody {
-  // Create new object based on type definition.
   const sanitized: types.CreateWidgetBody = {
     name: obj.name,
   };
@@ -47,7 +46,6 @@ export function sanitizeCreateWidgetBody(
 export function sanitizeExhaustiveParamsBody(
   obj: types.ExhaustiveParamsBody,
 ): types.ExhaustiveParamsBody {
-  // Create new object based on type definition.
   const sanitized: types.ExhaustiveParamsBody = {
     bar: obj.bar,
     foo: obj.foo,
@@ -62,7 +60,6 @@ export function sanitizeExhaustiveParamsBody(
  * Properties with `undefined` values are not included.
  */
 export function sanitizeGizmo(obj: types.Gizmo): types.Gizmo {
-  // Create new object based on type definition.
   const sanitized: types.Gizmo = {
     id: obj.id,
     name: obj.name,
@@ -80,7 +77,6 @@ export function sanitizeGizmo(obj: types.Gizmo): types.Gizmo {
 export function sanitizeGizmosResponse(
   obj: types.GizmosResponse,
 ): types.GizmosResponse {
-  // Create new object based on type definition.
   const sanitized: types.GizmosResponse = {
     data: obj.data.map(sanitizeGizmo),
   };
@@ -94,7 +90,6 @@ export function sanitizeGizmosResponse(
  * Properties with `undefined` values are not included.
  */
 export function sanitizeNewWidget(obj: types.NewWidget): types.NewWidget {
-  // Create new object based on type definition.
   const sanitized: types.NewWidget = {
     buzz: obj.buzz,
     fiz: obj.fiz,
@@ -118,7 +113,6 @@ export function sanitizeNewWidget(obj: types.NewWidget): types.NewWidget {
 export function sanitizeNewWidgetFoo(
   obj: types.NewWidgetFoo,
 ): types.NewWidgetFoo {
-  // Create new object based on type definition.
   const sanitized: types.NewWidgetFoo = {
     buzz: obj.buzz,
     fiz: obj.fiz,
@@ -133,7 +127,6 @@ export function sanitizeNewWidgetFoo(
  * Properties with `undefined` values are not included.
  */
 export function sanitizeWidget(obj: types.Widget): types.Widget {
-  // Create new object based on type definition.
   const sanitized: types.Widget = {
     buzz: obj.buzz,
     fiz: obj.fiz,
@@ -154,7 +147,6 @@ export function sanitizeWidget(obj: types.Widget): types.Widget {
  * Properties with `undefined` values are not included.
  */
 export function sanitizeWidgetFoo(obj: types.WidgetFoo): types.WidgetFoo {
-  // Create new object based on type definition.
   const sanitized: types.WidgetFoo = {
     buzz: obj.buzz,
     fiz: obj.fiz,
