@@ -46,17 +46,9 @@ export function validateComboAuthSchemesParams(): ValidationError[] {
 /**
  * Validates input parameters for the exhaustiveFormats() method.
  */
-export function validateExhaustiveFormatsParams(params?: {
-  stringNoFormat?: string;
-  stringDate?: Date;
-  stringDateTime?: Date;
-  integerNoFormat?: number;
-  integerInt32?: number;
-  integerInt64?: number;
-  numberNoFormat?: number;
-  numberFloat?: number;
-  numberDouble?: number;
-}): ValidationError[] {
+export function validateExhaustiveFormatsParams(
+  params?: types.ExhaustiveFormatsParams,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   if (!params) return [];
   if (
@@ -163,39 +155,9 @@ export function validateExhaustiveFormatsParams(params?: {
 /**
  * Validates input parameters for the exhaustiveParams() method.
  */
-export function validateExhaustiveParamsParams(params: {
-  pathString: string;
-  pathEnum: types.ExhaustiveParamsPathEnum;
-  pathNumber: number;
-  pathInteger: number;
-  pathBoolean: boolean;
-  pathStringArray: string[];
-  pathEnumArray: types.ExhaustiveParamsPathEnumArray[];
-  pathNumberArray: number[];
-  pathIntegerArray: number[];
-  pathBooleanArray: boolean[];
-  queryString?: string;
-  queryEnum?: types.ExhaustiveParamsQueryEnum;
-  queryNumber?: number;
-  queryInteger?: number;
-  queryBoolean?: boolean;
-  queryStringArray?: string[];
-  queryEnumArray?: types.ExhaustiveParamsQueryEnumArray[];
-  queryNumberArray?: number[];
-  queryIntegerArray?: number[];
-  queryBooleanArray?: boolean[];
-  headerString?: string;
-  headerEnum?: types.ExhaustiveParamsHeaderEnum;
-  headerNumber?: number;
-  headerInteger?: number;
-  headerBoolean?: boolean;
-  headerStringArray?: string[];
-  headerEnumArray?: types.ExhaustiveParamsHeaderEnumArray[];
-  headerNumberArray?: number[];
-  headerIntegerArray?: number[];
-  headerBooleanArray?: boolean[];
-  body?: types.ExhaustiveParamsBody;
-}): ValidationError[] {
+export function validateExhaustiveParamsParams(
+  params: types.ExhaustiveParamsParams,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   if (
     typeof params.queryString !== 'undefined' &&
@@ -626,12 +588,9 @@ export function validateExhaustiveParamsParams(params: {
 /**
  * Validates input parameters for the createGizmo() method.
  */
-export function validateCreateGizmoParams(params?: {
-  /**
-   * Anonymous enum
-   */
-  size?: types.CreateGizmoSize;
-}): ValidationError[] {
+export function validateCreateGizmoParams(
+  params?: types.CreateGizmoParams,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   if (!params) return [];
   if (typeof params.size !== 'undefined') {
@@ -653,9 +612,9 @@ export function validateCreateGizmoParams(params?: {
 /**
  * Validates input parameters for the getGizmos() method.
  */
-export function validateGetGizmosParams(params?: {
-  search?: string;
-}): ValidationError[] {
+export function validateGetGizmosParams(
+  params?: types.GetGizmosParams,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   if (!params) return [];
   if (
@@ -674,12 +633,9 @@ export function validateGetGizmosParams(params?: {
 /**
  * Validates input parameters for the updateGizmo() method.
  */
-export function validateUpdateGizmoParams(params?: {
-  /**
-   * array of primitive
-   */
-  factors?: string[];
-}): ValidationError[] {
+export function validateUpdateGizmoParams(
+  params?: types.UpdateGizmoParams,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   if (!params) return [];
   if (
@@ -722,12 +678,9 @@ export function validateUpdateGizmoParams(params?: {
 /**
  * Validates input parameters for the createWidget() method.
  */
-export function validateCreateWidgetParams(params?: {
-  /**
-   * The new widget
-   */
-  body?: types.CreateWidgetBody;
-}): ValidationError[] {
+export function validateCreateWidgetParams(
+  params?: types.CreateWidgetParams,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   if (!params) return [];
   if (typeof params.body !== 'undefined') {
@@ -739,12 +692,9 @@ export function validateCreateWidgetParams(params?: {
 /**
  * Validates input parameters for the deleteWidgetFoo() method.
  */
-export function validateDeleteWidgetFooParams(params: {
-  /**
-   * The widget ID
-   */
-  id: string;
-}): ValidationError[] {
+export function validateDeleteWidgetFooParams(
+  params: types.DeleteWidgetFooParams,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   if (typeof params.id === 'undefined') {
     errors.push({ code: 'REQUIRED', title: '"id" is required', path: 'id' });
@@ -765,12 +715,9 @@ export function validateDeleteWidgetFooParams(params: {
 /**
  * Validates input parameters for the getWidgetFoo() method.
  */
-export function validateGetWidgetFooParams(params: {
-  /**
-   * The widget ID
-   */
-  id: string;
-}): ValidationError[] {
+export function validateGetWidgetFooParams(
+  params: types.GetWidgetFooParams,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   if (typeof params.id === 'undefined') {
     errors.push({ code: 'REQUIRED', title: '"id" is required', path: 'id' });
