@@ -22,6 +22,8 @@ import {
 } from '@basketry/typescript';
 import { header } from '@basketry/typescript/lib/warning';
 
+const typeModule = 'types';
+
 export class SanitizerFactory {
   public readonly target = 'typescript';
 
@@ -46,7 +48,7 @@ export class SanitizerFactory {
   private *buildFile(): Iterable<string> {
     yield header(this.service, require('../package.json'), this.options);
     yield '';
-    yield `import * as types from "${
+    yield `import * as ${typeModule} from "${
       this.options?.typescriptValidators?.typesImportPath ?? './types'
     }"`;
     yield '';
@@ -60,20 +62,21 @@ export class SanitizerFactory {
     for (const type of sort(this.service.types)) {
       yield '/**';
       yield ' * Returns a new object that only contains properties defined';
-      yield ` * in the {@link ${buildTypeName(type, 'types')}|${buildTypeName(
+      yield ` * in the {@link ${buildTypeName(
         type,
-      )}} type definition.`;
+        typeModule,
+      )}|${buildTypeName(type)}} type definition.`;
       yield ' * Properties with `undefined` values are not included.';
       yield ' */';
       yield `export function ${camel(
         `sanitize_${type.name.value}`,
-      )}(obj: ${buildTypeName(type, 'types')}): ${buildTypeName(
+      )}(obj: ${buildTypeName(type, typeModule)}): ${buildTypeName(
         type,
-        'types',
+        typeModule,
       )} {`;
 
       yield '// Create new object based on type definition.';
-      yield `const sanitized: ${buildTypeName(type, 'types')} = {`;
+      yield `const sanitized: ${buildTypeName(type, typeModule)} = {`;
       for (const prop of sort(type.properties)) {
         const name = `${buildPropertyName(prop)}`;
         const accessor = `obj.${name}`;
@@ -113,9 +116,9 @@ export class SanitizerFactory {
     for (const union of sort(this.service.unions)) {
       yield `export function ${camel(
         `sanitize_${union.name.value}`,
-      )}(obj: ${buildTypeName(union, 'types')}): ${buildTypeName(
+      )}(obj: ${buildTypeName(union, typeModule)}): ${buildTypeName(
         union,
-        'types',
+        typeModule,
       )} {`;
 
       yield '  return stripUndefinedValues([';
@@ -123,7 +126,7 @@ export class SanitizerFactory {
       for (const member of union.members) {
         yield `${camel(
           `sanitize_${member.typeName.value}`,
-        )}(obj as ${buildTypeName(member, 'types')}),`;
+        )}(obj as ${buildTypeName(member, typeModule)}),`;
       }
       yield '].reduce( (acc, val) => ({ ...acc, ...val }), {}));';
 
@@ -137,7 +140,7 @@ export class SanitizerFactory {
       if (!method.parameters.length) continue;
 
       const hasRequiredParams = method.parameters.some(isRequired);
-      const paramType = buildMethodParamsTypeName(method, 'types');
+      const paramType = buildMethodParamsTypeName(method, typeModule);
 
       yield `export function ${camel(
         `sanitize_${method.name.value}_params`,
