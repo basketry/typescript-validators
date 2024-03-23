@@ -15,8 +15,7 @@ import { NamespacedTypescriptValidatorsOptions } from './types';
 import { camel, pascal } from 'case';
 import {
   buildFilePath,
-  buildInterfaceName,
-  buildMethodName,
+  buildMethodParamsTypeName,
   buildParameterName,
   buildPropertyName,
   buildTypeName,
@@ -137,10 +136,8 @@ export class SanitizerFactory {
       .sort(([, a], [, b]) => a.name.value.localeCompare(b.name.value))) {
       if (!method.parameters.length) continue;
 
-      const intName = buildInterfaceName(int, 'types');
-      const methodName = buildMethodName(method);
       const hasRequiredParams = method.parameters.some(isRequired);
-      const paramType = `Parameters<${intName}['${methodName}']>[0]`;
+      const paramType = buildMethodParamsTypeName(method, 'types');
 
       yield `export function ${camel(
         `sanitize_${method.name.value}_params`,

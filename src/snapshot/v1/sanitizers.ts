@@ -175,10 +175,10 @@ export function sanitizeExampleUnion(
 }
 
 export function sanitizeCreateGizmoParams(
-  params?: Parameters<types.GizmoService['createGizmo']>[0],
-): Parameters<types.GizmoService['createGizmo']>[0] {
+  params?: types.CreateGizmoParams,
+): types.CreateGizmoParams {
   // Create new object based on method parameters.
-  const sanitized: Parameters<types.GizmoService['createGizmo']>[0] = {
+  const sanitized: types.CreateGizmoParams = {
     size: params?.size,
   };
 
@@ -186,10 +186,10 @@ export function sanitizeCreateGizmoParams(
 }
 
 export function sanitizeCreateWidgetParams(
-  params?: Parameters<types.WidgetService['createWidget']>[0],
-): Parameters<types.WidgetService['createWidget']>[0] {
+  params?: types.CreateWidgetParams,
+): types.CreateWidgetParams {
   // Create new object based on method parameters.
-  const sanitized: Parameters<types.WidgetService['createWidget']>[0] = {
+  const sanitized: types.CreateWidgetParams = {
     body:
       typeof params?.body === 'undefined'
         ? undefined
@@ -200,10 +200,10 @@ export function sanitizeCreateWidgetParams(
 }
 
 export function sanitizeDeleteWidgetFooParams(
-  params: Parameters<types.WidgetService['deleteWidgetFoo']>[0],
-): Parameters<types.WidgetService['deleteWidgetFoo']>[0] {
+  params: types.DeleteWidgetFooParams,
+): types.DeleteWidgetFooParams {
   // Create new object based on method parameters.
-  const sanitized: Parameters<types.WidgetService['deleteWidgetFoo']>[0] = {
+  const sanitized: types.DeleteWidgetFooParams = {
     id: params.id,
   };
 
@@ -211,75 +211,73 @@ export function sanitizeDeleteWidgetFooParams(
 }
 
 export function sanitizeExhaustiveFormatsParams(
-  params?: Parameters<types.ExhaustiveService['exhaustiveFormats']>[0],
-): Parameters<types.ExhaustiveService['exhaustiveFormats']>[0] {
+  params?: types.ExhaustiveFormatsParams,
+): types.ExhaustiveFormatsParams {
   // Create new object based on method parameters.
-  const sanitized: Parameters<types.ExhaustiveService['exhaustiveFormats']>[0] =
-    {
-      integerInt32: params?.integerInt32,
-      integerInt64: params?.integerInt64,
-      integerNoFormat: params?.integerNoFormat,
-      numberDouble: params?.numberDouble,
-      numberFloat: params?.numberFloat,
-      numberNoFormat: params?.numberNoFormat,
-      stringDate: params?.stringDate,
-      stringDateTime: params?.stringDateTime,
-      stringNoFormat: params?.stringNoFormat,
-    };
+  const sanitized: types.ExhaustiveFormatsParams = {
+    integerInt32: params?.integerInt32,
+    integerInt64: params?.integerInt64,
+    integerNoFormat: params?.integerNoFormat,
+    numberDouble: params?.numberDouble,
+    numberFloat: params?.numberFloat,
+    numberNoFormat: params?.numberNoFormat,
+    stringDate: params?.stringDate,
+    stringDateTime: params?.stringDateTime,
+    stringNoFormat: params?.stringNoFormat,
+  };
 
   return stripUndefinedValues(sanitized);
 }
 
 export function sanitizeExhaustiveParamsParams(
-  params: Parameters<types.ExhaustiveService['exhaustiveParams']>[0],
-): Parameters<types.ExhaustiveService['exhaustiveParams']>[0] {
+  params: types.ExhaustiveParamsParams,
+): types.ExhaustiveParamsParams {
   // Create new object based on method parameters.
-  const sanitized: Parameters<types.ExhaustiveService['exhaustiveParams']>[0] =
-    {
-      body:
-        typeof params.body === 'undefined'
-          ? undefined
-          : sanitizeExhaustiveParamsBody(params.body),
-      headerBoolean: params.headerBoolean,
-      headerBooleanArray: params.headerBooleanArray,
-      headerEnum: params.headerEnum,
-      headerEnumArray: params.headerEnumArray,
-      headerInteger: params.headerInteger,
-      headerIntegerArray: params.headerIntegerArray,
-      headerNumber: params.headerNumber,
-      headerNumberArray: params.headerNumberArray,
-      headerString: params.headerString,
-      headerStringArray: params.headerStringArray,
-      pathBoolean: params.pathBoolean,
-      pathBooleanArray: params.pathBooleanArray,
-      pathEnum: params.pathEnum,
-      pathEnumArray: params.pathEnumArray,
-      pathInteger: params.pathInteger,
-      pathIntegerArray: params.pathIntegerArray,
-      pathNumber: params.pathNumber,
-      pathNumberArray: params.pathNumberArray,
-      pathString: params.pathString,
-      pathStringArray: params.pathStringArray,
-      queryBoolean: params.queryBoolean,
-      queryBooleanArray: params.queryBooleanArray,
-      queryEnum: params.queryEnum,
-      queryEnumArray: params.queryEnumArray,
-      queryInteger: params.queryInteger,
-      queryIntegerArray: params.queryIntegerArray,
-      queryNumber: params.queryNumber,
-      queryNumberArray: params.queryNumberArray,
-      queryString: params.queryString,
-      queryStringArray: params.queryStringArray,
-    };
+  const sanitized: types.ExhaustiveParamsParams = {
+    body:
+      typeof params.body === 'undefined'
+        ? undefined
+        : sanitizeExhaustiveParamsBody(params.body),
+    headerBoolean: params.headerBoolean,
+    headerBooleanArray: params.headerBooleanArray,
+    headerEnum: params.headerEnum,
+    headerEnumArray: params.headerEnumArray,
+    headerInteger: params.headerInteger,
+    headerIntegerArray: params.headerIntegerArray,
+    headerNumber: params.headerNumber,
+    headerNumberArray: params.headerNumberArray,
+    headerString: params.headerString,
+    headerStringArray: params.headerStringArray,
+    pathBoolean: params.pathBoolean,
+    pathBooleanArray: params.pathBooleanArray,
+    pathEnum: params.pathEnum,
+    pathEnumArray: params.pathEnumArray,
+    pathInteger: params.pathInteger,
+    pathIntegerArray: params.pathIntegerArray,
+    pathNumber: params.pathNumber,
+    pathNumberArray: params.pathNumberArray,
+    pathString: params.pathString,
+    pathStringArray: params.pathStringArray,
+    queryBoolean: params.queryBoolean,
+    queryBooleanArray: params.queryBooleanArray,
+    queryEnum: params.queryEnum,
+    queryEnumArray: params.queryEnumArray,
+    queryInteger: params.queryInteger,
+    queryIntegerArray: params.queryIntegerArray,
+    queryNumber: params.queryNumber,
+    queryNumberArray: params.queryNumberArray,
+    queryString: params.queryString,
+    queryStringArray: params.queryStringArray,
+  };
 
   return stripUndefinedValues(sanitized);
 }
 
 export function sanitizeGetGizmosParams(
-  params?: Parameters<types.GizmoService['getGizmos']>[0],
-): Parameters<types.GizmoService['getGizmos']>[0] {
+  params?: types.GetGizmosParams,
+): types.GetGizmosParams {
   // Create new object based on method parameters.
-  const sanitized: Parameters<types.GizmoService['getGizmos']>[0] = {
+  const sanitized: types.GetGizmosParams = {
     search: params?.search,
   };
 
@@ -287,10 +285,10 @@ export function sanitizeGetGizmosParams(
 }
 
 export function sanitizeGetWidgetFooParams(
-  params: Parameters<types.WidgetService['getWidgetFoo']>[0],
-): Parameters<types.WidgetService['getWidgetFoo']>[0] {
+  params: types.GetWidgetFooParams,
+): types.GetWidgetFooParams {
   // Create new object based on method parameters.
-  const sanitized: Parameters<types.WidgetService['getWidgetFoo']>[0] = {
+  const sanitized: types.GetWidgetFooParams = {
     id: params.id,
   };
 
@@ -298,10 +296,10 @@ export function sanitizeGetWidgetFooParams(
 }
 
 export function sanitizeUpdateGizmoParams(
-  params?: Parameters<types.GizmoService['updateGizmo']>[0],
-): Parameters<types.GizmoService['updateGizmo']>[0] {
+  params?: types.UpdateGizmoParams,
+): types.UpdateGizmoParams {
   // Create new object based on method parameters.
-  const sanitized: Parameters<types.GizmoService['updateGizmo']>[0] = {
+  const sanitized: types.UpdateGizmoParams = {
     factors: params?.factors,
   };
 
