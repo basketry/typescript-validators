@@ -75,7 +75,6 @@ export class SanitizerFactory {
         typeModule,
       )} {`;
 
-      yield '// Create new object based on type definition.';
       yield `const sanitized: ${buildTypeName(type, typeModule)} = {`;
       for (const prop of sort(type.properties)) {
         const name = `${buildPropertyName(prop)}`;
