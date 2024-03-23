@@ -14,7 +14,7 @@
 
 import * as types from './types';
 
-function stripUndefinedValues<T extends object>(obj: T): T {
+function compact<T extends object>(obj: T): T {
   // Strip undefined values.
   return Object.keys(obj).reduce(
     (acc, key) =>
@@ -36,7 +36,7 @@ export function sanitizeCreateWidgetBody(
     name: obj.name,
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }
 
 /**
@@ -53,7 +53,7 @@ export function sanitizeExhaustiveParamsBody(
     foo: obj.foo,
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }
 
 /**
@@ -69,7 +69,7 @@ export function sanitizeGizmo(obj: types.Gizmo): types.Gizmo {
     size: obj.size,
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }
 
 /**
@@ -85,7 +85,7 @@ export function sanitizeGizmosResponse(
     data: obj.data.map(sanitizeGizmo),
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }
 
 /**
@@ -107,7 +107,7 @@ export function sanitizeNewWidget(obj: types.NewWidget): types.NewWidget {
     size: obj.size,
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }
 
 /**
@@ -124,7 +124,7 @@ export function sanitizeNewWidgetFoo(
     fiz: obj.fiz,
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }
 
 /**
@@ -145,7 +145,7 @@ export function sanitizeWidget(obj: types.Widget): types.Widget {
     size: obj.size,
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }
 
 /**
@@ -160,13 +160,13 @@ export function sanitizeWidgetFoo(obj: types.WidgetFoo): types.WidgetFoo {
     fiz: obj.fiz,
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }
 
 export function sanitizeExampleUnion(
   obj: types.ExampleUnion,
 ): types.ExampleUnion {
-  return stripUndefinedValues(
+  return compact(
     [
       sanitizeGizmo(obj as types.Gizmo),
       sanitizeWidget(obj as types.Widget),
@@ -182,7 +182,7 @@ export function sanitizeCreateGizmoParams(
     size: params?.size,
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }
 
 export function sanitizeCreateWidgetParams(
@@ -196,7 +196,7 @@ export function sanitizeCreateWidgetParams(
         : sanitizeCreateWidgetBody(params?.body),
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }
 
 export function sanitizeDeleteWidgetFooParams(
@@ -207,7 +207,7 @@ export function sanitizeDeleteWidgetFooParams(
     id: params.id,
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }
 
 export function sanitizeExhaustiveFormatsParams(
@@ -226,7 +226,7 @@ export function sanitizeExhaustiveFormatsParams(
     stringNoFormat: params?.stringNoFormat,
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }
 
 export function sanitizeExhaustiveParamsParams(
@@ -270,7 +270,7 @@ export function sanitizeExhaustiveParamsParams(
     queryStringArray: params.queryStringArray,
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }
 
 export function sanitizeGetGizmosParams(
@@ -281,7 +281,7 @@ export function sanitizeGetGizmosParams(
     search: params?.search,
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }
 
 export function sanitizeGetWidgetFooParams(
@@ -292,7 +292,7 @@ export function sanitizeGetWidgetFooParams(
     id: params.id,
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }
 
 export function sanitizeUpdateGizmoParams(
@@ -303,5 +303,5 @@ export function sanitizeUpdateGizmoParams(
     factors: params?.factors,
   };
 
-  return stripUndefinedValues(sanitized);
+  return compact(sanitized);
 }

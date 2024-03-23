@@ -53,7 +53,7 @@ export class SanitizerFactory {
     }"`;
     yield '';
 
-    yield 'function stripUndefinedValues<T extends object>(obj: T): T {';
+    yield 'function compact<T extends object>(obj: T): T {';
     yield '// Strip undefined values.';
     yield `return Object.keys(obj).reduce((acc, key)=>typeof obj[key] === "undefined" ? acc : {...acc, [key]: obj[key]}, {}) as T;`;
     yield '}';
@@ -107,7 +107,7 @@ export class SanitizerFactory {
       yield `}`;
       yield '';
 
-      yield 'return stripUndefinedValues(sanitized)';
+      yield 'return compact(sanitized)';
 
       yield '}';
       yield '';
@@ -121,7 +121,7 @@ export class SanitizerFactory {
         typeModule,
       )} {`;
 
-      yield '  return stripUndefinedValues([';
+      yield '  return compact([';
       // TODO: Handle primitive members
       for (const member of union.members) {
         yield `${camel(
@@ -178,7 +178,7 @@ export class SanitizerFactory {
 
       yield '}';
       yield '';
-      yield 'return stripUndefinedValues(sanitized)';
+      yield 'return compact(sanitized)';
       yield '}';
       yield '';
     }
