@@ -167,7 +167,7 @@ export class ValidatorMethodFactory {
   }
 
   private buildValidationFunctionType(): string {
-    return `type ValidationFunctionMkIII = (
+    return `type ValidationFunction = (
         value: any,
         path: string,
         isRequired: boolean,
@@ -184,14 +184,14 @@ export class ValidatorMethodFactory {
       
         required(value: any, path: string) {
           return {
-            ensure: (...validators: ValidationFunctionMkIII[]) =>
+            ensure: (...validators: ValidationFunction[]) =>
               this.run(value, path, [required, ...validators], true),
           };
         }
       
         optional(value: any, path: string) {
           return {
-            ensure: (...validators: ValidationFunctionMkIII[]) =>
+            ensure: (...validators: ValidationFunction[]) =>
               this.run(value, path, validators, false),
           };
         }
@@ -199,7 +199,7 @@ export class ValidatorMethodFactory {
         private run(
           value: any,
           path: string,
-          validators: ValidationFunctionMkIII[],
+          validators: ValidationFunction[],
           isRequired: boolean,
         ) {
           for (const validator of validators) {
@@ -219,8 +219,8 @@ export class ValidatorMethodFactory {
     if (this.needsArrayValidator) {
       yield ' ';
       yield `const array: (
-        ...validators: ValidationFunctionMkIII[]
-      ) => ValidationFunctionMkIII =
+        ...validators: ValidationFunction[]
+      ) => ValidationFunction =
         (...validators) =>
         (value, path, isRequired) => {
           if (Array.isArray(value)) {
@@ -254,7 +254,7 @@ export class ValidatorMethodFactory {
     if (this.needsPassthroughValidator) {
       yield `const using: (
             validator: (value: any, parentPath?: string) => ValidationError[],
-          ) => ValidationFunctionMkIII = (validator) => (value, path) =>
+          ) => ValidationFunction = (validator) => (value, path) =>
         validator(value, path);`;
     }
   }
@@ -262,7 +262,7 @@ export class ValidatorMethodFactory {
   private *buildRequiredValidator(): Iterable<string> {
     if (this.needsRequiredValidator) {
       yield ' ';
-      yield `const required: ValidationFunctionMkIII = (value, path) => {
+      yield `const required: ValidationFunction = (value, path) => {
         if (typeof value === 'undefined') {
           return [{ code: 'REQUIRED', title: \`"\${path}" is required\`, path }];
         }
@@ -308,7 +308,7 @@ export class ValidatorMethodFactory {
   private *buildStringValidator(): Iterable<string> {
     if (this.needsStringValidator) {
       yield ' ';
-      yield `const string: ValidationFunctionMkIII =
+      yield `const string: ValidationFunction =
         (value, path, isRequred) => {
         return nativeType(value, path, 'string', isRequred);
         };`;
@@ -318,7 +318,7 @@ export class ValidatorMethodFactory {
   private *buildNumberValidator(): Iterable<string> {
     if (this.needsStringValidator) {
       yield ' ';
-      yield `const number: ValidationFunctionMkIII =
+      yield `const number: ValidationFunction =
         (value, path, isRequred) => {
         return nativeType(value, path, 'number', isRequred);
         };`;
@@ -327,7 +327,7 @@ export class ValidatorMethodFactory {
 
   private *buildIntegerValidator(): Iterable<string> {
     if (this.needsIntegerValidator) {
-      yield `const integer: ValidationFunctionMkIII = (value, path, isRequired) => {
+      yield `const integer: ValidationFunction = (value, path, isRequired) => {
         if (
           (typeof value === 'number' && value % 1 !== 0) ||
           (typeof value !== 'number' && (isRequired || typeof value !== 'undefined'))
@@ -350,7 +350,7 @@ export class ValidatorMethodFactory {
   private *buildBooleanValidator(): Iterable<string> {
     if (this.needsBooleanValidator) {
       yield ' ';
-      yield `const boolean: ValidationFunctionMkIII =
+      yield `const boolean: ValidationFunction =
         (value, path, isRequred) => {
         return nativeType(value, path, 'boolean', isRequred);
         };`;
@@ -360,7 +360,7 @@ export class ValidatorMethodFactory {
   private *buildDateValidator(): Iterable<string> {
     if (this.needsDateValidator) {
       yield ' ';
-      yield `const date: ValidationFunctionMkIII = (value, path, isRequired) => {
+      yield `const date: ValidationFunction = (value, path, isRequired) => {
         if (value instanceof Date) return [];
         if (isRequired || typeof value !== 'undefined') {
           return [
@@ -381,7 +381,7 @@ export class ValidatorMethodFactory {
       yield ' ';
       yield `const maxLength: (
         max: number,
-      ) => ValidationFunctionMkIII = (max) => (value, path, isRequired) => {
+      ) => ValidationFunction = (max) => (value, path, isRequired) => {
         if (typeof value === 'string' && value.length > max) {
           return [
             {
@@ -403,7 +403,7 @@ export class ValidatorMethodFactory {
       yield ' ';
       yield `const minLength: (
         min: number,
-      ) => ValidationFunctionMkIII = (min) => (value, path, isRequired) => {
+      ) => ValidationFunction = (min) => (value, path, isRequired) => {
         if (typeof value === 'string' && value.length < min) {
           return [
             {
@@ -425,7 +425,7 @@ export class ValidatorMethodFactory {
       yield ' ';
       yield `const pattern: (
         regex: RegExp,
-      ) => ValidationFunctionMkIII = (regex) => (value, path, isRequired) => {
+      ) => ValidationFunction = (regex) => (value, path, isRequired) => {
         if (typeof value === 'string' && !regex.test(value)) {
           return [
             {
@@ -444,7 +444,7 @@ export class ValidatorMethodFactory {
 
   private *buildNumberMultipleOfValidator(): Iterable<string> {
     if (this.needsNumberMultipleOfValidator) {
-      yield `const multipleOf: (factor: number) => ValidationFunctionMkIII =
+      yield `const multipleOf: (factor: number) => ValidationFunction =
         (factor) => (value, path, isRequired) => {
         if (isRequired || typeof value !== 'undefined') {
             if (typeof value === 'number' && value % factor !== 0) {
@@ -464,7 +464,7 @@ export class ValidatorMethodFactory {
 
   private *buildNumberGreaterThanValidator(): Iterable<string> {
     if (this.needsNumberGreaterThanValidator) {
-      yield `const gt: (min: number) => ValidationFunctionMkIII =
+      yield `const gt: (min: number) => ValidationFunction =
       (min) => (value, path, isRequired) => {
         if (isRequired || typeof value !== 'undefined') {
           if (typeof value === 'number' && value <= min) {
@@ -486,7 +486,7 @@ export class ValidatorMethodFactory {
 
   private *buildNumberGreaterOrEqualValidator(): Iterable<string> {
     if (this.needsNumberGreaterOrEqualValidator) {
-      yield `const gte: (min: number) => ValidationFunctionMkIII =
+      yield `const gte: (min: number) => ValidationFunction =
       (min) => (value, path, isRequired) => {
         if (isRequired || typeof value !== 'undefined') {
           if (typeof value === 'number' && value < min) {
@@ -508,7 +508,7 @@ export class ValidatorMethodFactory {
 
   private *buildNumberLessThanValidator(): Iterable<string> {
     if (this.needsNumberLessThanValidator) {
-      yield `const lt: (max: number) => ValidationFunctionMkIII =
+      yield `const lt: (max: number) => ValidationFunction =
       (max) => (value, path, isRequired) => {
         if (isRequired || typeof value !== 'undefined') {
           if (typeof value === 'number' && value >= max) {
@@ -530,7 +530,7 @@ export class ValidatorMethodFactory {
 
   private *buildNumberLessOrEqualValidator(): Iterable<string> {
     if (this.needsNumberLessOrEqualValidator) {
-      yield `const lte: (max: number) => ValidationFunctionMkIII =
+      yield `const lte: (max: number) => ValidationFunction =
       (max) => (value, path, isRequired) => {
         if (isRequired || typeof value !== 'undefined') {
           if (typeof value === 'number' && value > max) {
@@ -552,7 +552,7 @@ export class ValidatorMethodFactory {
 
   private *buildArrayMaxItemsValidator(): Iterable<string> {
     if (this.needsArrayMaxItemsValidator) {
-      yield `const maxItems: (max: number) => ValidationFunctionMkIII =
+      yield `const maxItems: (max: number) => ValidationFunction =
       (max) => (value, path, isRequired) => {
         if (Array.isArray(value) && value.length > max) {
           return [
@@ -572,7 +572,7 @@ export class ValidatorMethodFactory {
 
   private *buildArrayMinItemsValidator(): Iterable<string> {
     if (this.needsArrayMinItemsValidator) {
-      yield `const minItems: (min: number) => ValidationFunctionMkIII =
+      yield `const minItems: (min: number) => ValidationFunction =
       (min) => (value, path, isRequired) => {
         if (Array.isArray(value) && value.length < min) {
           return [
@@ -592,7 +592,7 @@ export class ValidatorMethodFactory {
 
   private *buildArrayUniqueItemsValidator(): Iterable<string> {
     if (this.needsArrayUniqueItemsValidator) {
-      yield `const uniqueItems: () => ValidationFunctionMkIII = () => (
+      yield `const uniqueItems: () => ValidationFunction = () => (
       value,
       path,
       isRequired,
