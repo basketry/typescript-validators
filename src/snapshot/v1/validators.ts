@@ -29,7 +29,7 @@ export type ValidationError = {
   path: string;
 };
 
-type ValidationFunctionMkIII = (
+type ValidationFunction = (
   value: any,
   path: string,
   isRequired: boolean,
@@ -44,14 +44,14 @@ class Validator {
 
   required(value: any, path: string) {
     return {
-      ensure: (...validators: ValidationFunctionMkIII[]) =>
+      ensure: (...validators: ValidationFunction[]) =>
         this.run(value, path, [required, ...validators], true),
     };
   }
 
   optional(value: any, path: string) {
     return {
-      ensure: (...validators: ValidationFunctionMkIII[]) =>
+      ensure: (...validators: ValidationFunction[]) =>
         this.run(value, path, validators, false),
     };
   }
@@ -59,7 +59,7 @@ class Validator {
   private run(
     value: any,
     path: string,
-    validators: ValidationFunctionMkIII[],
+    validators: ValidationFunction[],
     isRequired: boolean,
   ) {
     for (const validator of validators) {
@@ -74,16 +74,14 @@ class Validator {
   }
 }
 
-const required: ValidationFunctionMkIII = (value, path) => {
+const required: ValidationFunction = (value, path) => {
   if (typeof value === 'undefined') {
     return [{ code: 'REQUIRED', title: `"${path}" is required`, path }];
   }
   return [];
 };
 
-const array: (
-  ...validators: ValidationFunctionMkIII[]
-) => ValidationFunctionMkIII =
+const array: (...validators: ValidationFunction[]) => ValidationFunction =
   (...validators) =>
   (value, path, isRequired) => {
     if (Array.isArray(value)) {
@@ -110,7 +108,7 @@ const array: (
       return [];
     }
   };
-const maxItems: (max: number) => ValidationFunctionMkIII =
+const maxItems: (max: number) => ValidationFunction =
   (max) => (value, path, isRequired) => {
     if (Array.isArray(value) && value.length > max) {
       return [
@@ -125,7 +123,7 @@ const maxItems: (max: number) => ValidationFunctionMkIII =
     }
     return [];
   };
-const minItems: (min: number) => ValidationFunctionMkIII =
+const minItems: (min: number) => ValidationFunction =
   (min) => (value, path, isRequired) => {
     if (Array.isArray(value) && value.length < min) {
       return [
@@ -142,7 +140,7 @@ const minItems: (min: number) => ValidationFunctionMkIII =
   };
 const using: (
   validator: (value: any, parentPath?: string) => ValidationError[],
-) => ValidationFunctionMkIII = (validator) => (value, path) =>
+) => ValidationFunction = (validator) => (value, path) =>
   validator(value, path);
 
 function nativeType(
@@ -168,14 +166,14 @@ function nativeType(
   return [];
 }
 
-const string: ValidationFunctionMkIII = (value, path, isRequred) => {
+const string: ValidationFunction = (value, path, isRequred) => {
   return nativeType(value, path, 'string', isRequred);
 };
 
-const number: ValidationFunctionMkIII = (value, path, isRequred) => {
+const number: ValidationFunction = (value, path, isRequred) => {
   return nativeType(value, path, 'number', isRequred);
 };
-const integer: ValidationFunctionMkIII = (value, path, isRequired) => {
+const integer: ValidationFunction = (value, path, isRequired) => {
   if (
     (typeof value === 'number' && value % 1 !== 0) ||
     (typeof value !== 'number' && (isRequired || typeof value !== 'undefined'))
@@ -193,11 +191,11 @@ const integer: ValidationFunctionMkIII = (value, path, isRequired) => {
   return [];
 };
 
-const boolean: ValidationFunctionMkIII = (value, path, isRequred) => {
+const boolean: ValidationFunction = (value, path, isRequred) => {
   return nativeType(value, path, 'boolean', isRequred);
 };
 
-const date: ValidationFunctionMkIII = (value, path, isRequired) => {
+const date: ValidationFunction = (value, path, isRequired) => {
   if (value instanceof Date) return [];
   if (isRequired || typeof value !== 'undefined') {
     return [
@@ -211,7 +209,7 @@ const date: ValidationFunctionMkIII = (value, path, isRequired) => {
   return [];
 };
 
-const maxLength: (max: number) => ValidationFunctionMkIII =
+const maxLength: (max: number) => ValidationFunction =
   (max) => (value, path, isRequired) => {
     if (typeof value === 'string' && value.length > max) {
       return [
@@ -227,7 +225,7 @@ const maxLength: (max: number) => ValidationFunctionMkIII =
     return [];
   };
 
-const pattern: (regex: RegExp) => ValidationFunctionMkIII =
+const pattern: (regex: RegExp) => ValidationFunction =
   (regex) => (value, path, isRequired) => {
     if (typeof value === 'string' && !regex.test(value)) {
       return [
@@ -242,7 +240,7 @@ const pattern: (regex: RegExp) => ValidationFunctionMkIII =
     }
     return [];
   };
-const multipleOf: (factor: number) => ValidationFunctionMkIII =
+const multipleOf: (factor: number) => ValidationFunction =
   (factor) => (value, path, isRequired) => {
     if (isRequired || typeof value !== 'undefined') {
       if (typeof value === 'number' && value % factor !== 0) {
