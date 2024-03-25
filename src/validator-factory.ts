@@ -1,15 +1,18 @@
-import { constant } from 'case';
+import { camel, constant, pascal } from 'case';
 import {
   Enum,
   File,
+  getTypeByName,
   hasOnlyOptionalParameters,
   hasParameters,
   isRequired,
   Method,
   Parameter,
   Property,
+  Scalar,
   Service,
   Type,
+  Union,
   ValidationRule,
 } from 'basketry';
 import { header as warning } from '@basketry/typescript/lib/warning';
@@ -22,13 +25,17 @@ import {
 import {
   buildMethodName,
   buildMethodParams,
-  buildParameterName,
-  buildRootTypeName,
   buildTypeName,
+  buildInterfaceName,
+  buildFilePath,
+  buildMethodParamsTypeName,
 } from '@basketry/typescript';
 import { eslintDisable, format, from } from '@basketry/typescript/lib/utils';
-
-import { NamespacedTypescriptOptions } from '@basketry/typescript/lib/types';
+import { NamespacedTypescriptValidatorsOptions } from './types';
+import {
+  MemberValidatorFactory,
+  ValidatorMethodFactory,
+} from './member-validator-factory';
 
 export type GuardClauseFactory = (
   param: Parameter | Property,
@@ -36,21 +43,20 @@ export type GuardClauseFactory = (
 ) => string | undefined;
 
 export class ValidatorFactory {
-  public readonly target = 'typescript';
-
   constructor(
-    private readonly factories: GuardClauseFactory[],
     private readonly service: Service,
-    private readonly options?: NamespacedTypescriptOptions,
+    private readonly options?: NamespacedTypescriptValidatorsOptions,
   ) {}
+
+  private readonly state = new ValidatorMethodFactory();
 
   build(): File[] {
     const imports = Array.from(this.buildImports()).join('\n');
-    const standardTypes = Array.from(this.buildStandardTypes()).join('\n');
 
     const methodParams = this.service.interfaces
       .map((int) => int.methods)
       .reduce((a, b) => a.concat(b), [])
+      .sort((a, b) => a.name.value.localeCompare(b.name.value))
       .map((m) =>
         Array.from(this.buildMethodParamsValidator(m))
           .filter((x) => x)
@@ -59,6 +65,7 @@ export class ValidatorFactory {
       .join('\n\n');
 
     const types = this.service.types
+      .sort((a, b) => a.name.value.localeCompare(b.name.value))
       .map((t) =>
         Array.from(this.buildTypeValidator(t))
           .filter((x) => x)
@@ -67,8 +74,18 @@ export class ValidatorFactory {
       .join('\n\n');
 
     const enums = this.service.enums
+      .sort((a, b) => a.name.value.localeCompare(b.name.value))
       .map((e) =>
         Array.from(this.buildEnumValidator(e))
+          .filter((x) => x)
+          .join('\n'),
+      )
+      .join('\n\n');
+
+    const unions = this.service.unions
+      .sort((a, b) => a.name.value.localeCompare(b.name.value))
+      .map((u) =>
+        Array.from(this.buildUnionValidator(u))
           .filter((x) => x)
           .join('\n'),
       )
@@ -82,6 +99,8 @@ export class ValidatorFactory {
 
     const disable = from(eslintDisable(this.options || {}));
 
+    const standardTypes = Array.from(this.buildStandardTypes()).join('\n');
+
     const contents = [
       header,
       disable,
@@ -90,11 +109,13 @@ export class ValidatorFactory {
       methodParams,
       types,
       enums,
+      unions,
+      Array.from(this.buildValidatedServiceWrappers()).join('\n'),
     ].join('\n\n');
 
     return [
       {
-        path: [`v${this.service.majorVersion.value}`, 'validators.ts'],
+        path: buildFilePath(['validators.ts'], this.service, this.options),
         contents: format(contents, this.options),
       },
     ];
@@ -103,11 +124,24 @@ export class ValidatorFactory {
   private *buildImports(): Iterable<string> {
     yield `import${
       this.options?.typescript?.typeImports ? ' type ' : ' '
-    }* as types from "./types"`;
+    }* as types from "${
+      this.options?.typescriptValidators?.typesImportPath ?? './types'
+    }"`;
+
+    yield `import ${
+      this.options?.typescript?.typeImports ? ' type ' : ' '
+    } * as sanitizers from "./sanitizers"`;
   }
 
+  private readonly codes = new Set<string>();
   private *buildStandardTypes(): Iterable<string> {
-    yield 'export type ValidationError = { code: string, title: string, path: string };';
+    const codes = Array.from(this.codes)
+      .sort((a, b) => a.localeCompare(b))
+      .map((code) => `'${code}'`)
+      .join(' | ');
+    // yield `export type ValidationError = { code: ${codes}, title: string, path: string };`;
+    // yield ' ';
+    yield* this.state.buildInternalHelperMethods();
   }
 
   private *buildMethodParamsValidator(
@@ -117,44 +151,77 @@ export class ValidatorFactory {
 
     yield `export function ${buildParamsValidatorName(method)}(`;
     yield* buildMethodParams(method, 'types');
+    yield `${hasParameters(method) ? ',' : ''}parentPath?: string`;
     yield `): ValidationError[] {`;
-
-    if (hasParameters(method)) {
-      yield 'const errors: ValidationError[] = [];';
-    }
 
     if (hasOnlyOptionalParameters(method)) {
       yield 'if(!params) return [];';
     }
 
-    for (const param of method.parameters) {
-      yield buildRequiredClause(param);
-      yield buildPrimitiveTypeClause(param);
-      yield buildCustomTypeClause(param);
+    const validatorFactory = new MemberValidatorFactory(
+      this.state,
+      'parentPath',
+    );
 
-      for (const rule of param.rules) {
-        for (const factory of this.factories) {
-          yield factory(param, rule);
-        }
-      }
-    }
+    yield* validatorFactory.build(method.parameters);
 
-    if (hasParameters(method)) {
-      yield 'return errors;';
-    } else {
-      yield 'return [];';
-    }
+    // if (hasParameters(method)) {
+    //   yield 'const errors: ValidationError[] = [];';
+    // }
+
+    // let needsOnError = false;
+    // const callsitesByProperty = new Map<string, string[]>();
+    // for (const param of method.parameters) {
+    //   const propertyClauses: string[] = [];
+    //   // yield this.buildRequiredClause(param);
+    //   // yield this.buildPrimitiveTypeClause(param);
+    //   const customTypeClause = this.buildCustomTypeClause(param);
+    //   if (customTypeClause) propertyClauses.push(customTypeClause);
+
+    //   for (const line of this.buildPrimitiveRules(param)) {
+    //     needsOnError = true;
+    //     propertyClauses.push(line);
+    //   }
+
+    //   if (propertyClauses.length) {
+    //     callsitesByProperty.set(param.name.value, propertyClauses);
+    //   }
+
+    //   for (const rule of param.rules) {
+    //     for (const factory of this.factories) {
+    //       yield factory(param, rule);
+    //     }
+    //   }
+    // }
+
+    // if (needsOnError) {
+    //   yield 'const onError = (error: ValidationError) => { errors.push(error); };';
+    // }
+    // for (const [property, callsites] of callsitesByProperty) {
+    //   yield ' ';
+    //   yield `// ${property}`;
+    //   yield* callsites;
+    // }
+
+    // if (hasParameters(method)) {
+    //   yield 'return errors;';
+    // } else {
+    //   yield 'return [];';
+    // }
     yield `}`;
   }
 
   private *buildTypeValidator(type: Type): Iterable<string | undefined> {
     yield `export function ${buildTypeValidatorName(
       type,
-    )}(params: ${buildTypeName(type, 'types')}): ValidationError[] {`;
+    )}(params: ${buildTypeName(
+      type,
+      'types',
+    )}, parentPath?: string): ValidationError[] {`;
 
-    if (type.properties.length || type.rules.length) {
-      yield 'const errors: ValidationError[] = [];';
-    }
+    // if (type.properties.length || type.rules.length) {
+    //   yield 'const errors: ValidationError[] = [];';
+    // }
 
     // TODO: build object rules
     // for (const rule of type.rules) {
@@ -163,23 +230,52 @@ export class ValidatorFactory {
     //   }
     // }
 
-    for (const property of type.properties) {
-      yield buildRequiredClause(property);
-      yield buildPrimitiveTypeClause(property);
-      yield buildCustomTypeClause(property);
+    const validatorFactory = new MemberValidatorFactory(
+      this.state,
+      'parentPath',
+    );
 
-      for (const rule of property.rules) {
-        for (const factory of this.factories) {
-          yield factory(property, rule);
-        }
-      }
-    }
+    yield* validatorFactory.build(type.properties);
 
-    if (type.properties.length || type.rules.length) {
-      yield 'return errors;';
-    } else {
-      yield 'return [];';
-    }
+    // let needsOnError = false;
+    // const callsitesByProperty = new Map<string, string[]>();
+    // for (const property of type.properties) {
+    //   const propertyClauses: string[] = [];
+    //   // yield this.buildRequiredClause(property);
+    //   // yield this.buildPrimitiveTypeClause(property);
+    //   const customTypeClause = this.buildCustomTypeClause(property);
+    //   if (customTypeClause) propertyClauses.push(customTypeClause);
+
+    //   for (const line of this.buildPrimitiveRules(property)) {
+    //     needsOnError = true;
+    //     propertyClauses.push(line);
+    //   }
+
+    //   if (propertyClauses.length) {
+    //     callsitesByProperty.set(property.name.value, propertyClauses);
+    //   }
+
+    //   for (const rule of property.rules) {
+    //     for (const factory of this.factories) {
+    //       yield factory(property, rule);
+    //     }
+    //   }
+    // }
+
+    // if (needsOnError) {
+    //   yield 'const onError = (error: ValidationError) => { errors.push(error); };';
+    // }
+    // for (const [property, callsites] of callsitesByProperty) {
+    //   yield ' ';
+    //   yield `// ${property}`;
+    //   yield* callsites;
+    // }
+
+    // if (type.properties.length || type.rules.length) {
+    //   yield 'return errors;';
+    // } else {
+    //   yield 'return [];';
+    // }
 
     yield `}`;
 
@@ -198,6 +294,7 @@ export class ValidatorFactory {
   }
 
   private *buildEnumValidator(e: Enum): Iterable<string | undefined> {
+    this.state.touchStringEnumValidator();
     yield `export function ${buildEnumValidatorName(e)}(value: ${buildTypeName(
       e,
       'types',
@@ -205,14 +302,16 @@ export class ValidatorFactory {
 
     yield 'const errors: ValidationError[] = [];';
 
-    const values = `[${e.values.map((v) => `"${v.value}"`).join(', ')}]`;
+    const values = `[${e.values
+      .map((v) => `"${v.content.value}"`)
+      .join(', ')}]`;
 
     const conditions = [
       `typeof value === 'string'`,
       `!${values}.includes(value)`,
     ];
 
-    yield `if(${conditions.join(' && ')}) {${buildError(
+    yield `if(${conditions.join(' && ')}) {${this.buildError(
       'string-enum',
       `Value must be one of ${values}`,
       '',
@@ -236,366 +335,153 @@ export class ValidatorFactory {
     )}() method.`;
     yield `${s} */`;
   }
-}
 
-function buildError(id: string, title: string, path: string): string {
-  return `errors.push({code: '${constant(
-    id,
-  )}', title: '${title}', path: '${path}' });`;
-}
+  private *buildUnionValidator(union: Union): Iterable<string | undefined> {
+    yield `export function ${buildTypeValidatorName(
+      union,
+    )}(params: ${buildTypeName(union, 'types')}): ValidationError[] {`;
+    yield 'const errors: ValidationError[] = [];';
 
-function buildConditions(
-  param: Parameter,
-  conditions: (n: string) => string[],
-): string[] {
-  const paramName = buildParameterName(param);
-  if (param.isArray) {
-    return [
-      `Array.isArray(params.${paramName})`,
-      `!params.${paramName}.some((x) => ${conditions('x').join(' && ')})`,
-    ];
-  } else {
-    return conditions(`params.` + paramName);
-  }
-}
-
-function buildMessage(param: Parameter | Property, message: string): string {
-  return param.isArray ? `Each item in ${message}` : message;
-}
-
-function buildRequiredClause(param: Parameter | Property): string | undefined {
-  if (isRequired(param)) {
-    const paramName = buildParameterName(param);
-    return `if(typeof params.${paramName} === 'undefined') {${buildError(
-      'required',
-      `"${paramName}" is required`,
-      paramName,
-    )}}`;
-  }
-  return;
-}
-
-function buildPrimitiveTypeClause(
-  param: Parameter | Property,
-): string | undefined {
-  if (param.isPrimitive && param.typeName.value !== 'untyped') {
-    const rootTypeName = buildRootTypeName(param, 'types');
-    const paramName = buildParameterName(param);
-
-    const conditions: string[] = [];
-
-    const rootCondition = (variable: string) => {
-      if (
-        param.typeName.value === 'date' ||
-        param.typeName.value === 'date-time'
-      ) {
-        return `!(${variable} instanceof Date)`;
-      } else {
-        return `typeof ${variable} !== '${rootTypeName}'`;
+    for (const member of union.members) {
+      if (!member.isPrimitive) {
+        const errorVariable = `${camel(member.typeName.value)}Errors`;
+        yield '\n';
+        yield `const ${errorVariable} = ${buildTypeValidatorName(
+          member,
+        )}(params as ${buildTypeName(member, 'types')})`;
+        yield `if(!${errorVariable}.length) return [];`;
+        yield `errors.push(...${errorVariable})`;
+        yield '\n';
       }
-    };
-
-    if (param.isArray) {
-      conditions.push(
-        ...[
-          `Array.isArray(params.${paramName})`,
-          `params.${paramName}.some(x => ${rootCondition('x')}${
-            rootTypeName === 'number' ? ' || Number.isNaN(x)' : ''
-          })`,
-        ],
-      );
-    } else {
-      conditions.push(
-        ...[
-          `typeof params.${paramName} !== 'undefined'`,
-          `(${rootCondition(`params.${paramName}`)}${
-            rootTypeName === 'number'
-              ? ` || Number.isNaN(params.${paramName})`
-              : ''
-          })`,
-        ],
-      );
     }
 
-    const message = `"${paramName}" must be a ${rootTypeName}`;
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      'type',
-      buildMessage(
-        param,
-        `${message}${isRequired(param) ? '' : ` if supplied`}`,
-      ),
-      paramName,
-    )}}`;
+    yield `return errors;`;
+    yield `}`;
   }
-  return;
-}
 
-function buildCustomTypeClause(
-  param: Parameter | Property,
-): string | undefined {
-  if (!param.isPrimitive) {
-    const typeValidatorName = buildTypeValidatorName(param);
-    const paramName = buildParameterName(param);
-    if (param.isArray) {
-      return `if(typeof params.${paramName} !== 'undefined') {params.${paramName}.forEach( arrayItem => errors.push(...${typeValidatorName}(arrayItem)));}`;
-    } else {
-      return `if(typeof params.${paramName} !== 'undefined') { errors.push(...${typeValidatorName}(params.${paramName})); }`;
+  private buildError(id: string, title: string, path: string): string {
+    const code = constant(id);
+    this.codes.add(code);
+    return `errors.push({code: '${code}', title: '${title}', path: '${path}' });`;
+  }
+
+  private *buildValidatedServiceWrappers(): Iterable<string> {
+    yield `export type ResponseBuilder<T> = (validationErrors: ValidationError[], err: any) => T`;
+    for (const int of sort(this.service.interfaces)) {
+      const returnTypes = sort(
+        Array.from(
+          new Set(
+            int.methods
+              .map((m) =>
+                getTypeByName(this.service, m.returnType?.typeName.value),
+              )
+              .filter((t): t is Type => !!t),
+          ),
+        ),
+      );
+
+      const hasVoid = int.methods.some((m) => !m.returnType);
+
+      const handlers = returnTypes.map(
+        (type) =>
+          `${camel(
+            `build_${type.name.value}`,
+          )}: ResponseBuilder<${buildTypeName(type, 'types')}>`,
+      );
+      if (hasVoid) {
+        handlers.push('buildVoid: ResponseBuilder<void>');
+      }
+
+      const handlersType = `{${handlers.join(',')}}`;
+
+      const intName = buildInterfaceName(int, 'types');
+      yield `export class ${pascal(
+        `validated_${int.name.value}_service`,
+      )} implements ${buildInterfaceName(int, 'types')} {`;
+      yield `constructor(private readonly service: ${intName}, private readonly handlers: ${handlersType}){}`;
+      yield '';
+      for (const method of sort(int.methods)) {
+        const methodName = buildMethodName(method);
+        const returnType = getTypeByName(
+          this.service,
+          method.returnType?.typeName.value,
+        );
+
+        const sanitize = (call: string, isAsync: boolean): string => {
+          if (returnType) {
+            return `sanitizers.${camel(`sanitize_${returnType.name.value}`)}(${
+              isAsync ? 'await' : ''
+            } ${call})`;
+          } else {
+            return call;
+          }
+        };
+
+        const sanitizeAsync = (call: string): string => {
+          return sanitize(call, true);
+        };
+
+        const sanitizeSync = (call: string): string => {
+          return sanitize(call, false);
+        };
+
+        const handlerName = returnType
+          ? `this.handlers.${camel(`build_${returnType.name.value}`)}`
+          : 'this.handlers.buildVoid';
+
+        const hasParams = !!method.parameters.length;
+        const hasRequiredParams = method.parameters.some(isRequired);
+        const paramDef = method.parameters.length
+          ? `params${hasRequiredParams ? '' : '?'}: ${buildMethodParamsTypeName(
+              method,
+              'types',
+            )}`
+          : '';
+        yield `async ${methodName}(${paramDef}) {`;
+        yield `${
+          hasParams ? 'let' : 'const'
+        } validationErrors: ValidationError[] = [];`;
+        yield 'try {';
+        if (hasParams) {
+          yield `validationErrors = ${buildParamsValidatorName(
+            method,
+          )}(params)`;
+          yield `if(validationErrors.length) {`;
+          if (returnType) {
+            yield `return ${sanitizeSync(
+              `${handlerName}(validationErrors, undefined)`,
+            )}`;
+          } else {
+            yield `return ${handlerName}(validationErrors, undefined)`;
+          }
+          yield '}';
+        }
+        if (hasParams) {
+          yield `const sanitizedParams = sanitizers.${camel(
+            `sanitize_${method.name.value}_params`,
+          )}(params)`;
+        }
+        yield `return ${sanitizeAsync(
+          `this.service.${methodName}(${hasParams ? 'sanitizedParams' : ''})`,
+        )}`;
+        yield '} catch (err) {';
+        if (returnType) {
+          yield `return ${sanitizeSync(
+            `${handlerName}(validationErrors, err)`,
+          )}`;
+        } else {
+          yield `return ${handlerName}(validationErrors, err)`;
+        }
+        yield '}';
+        yield '}';
+        yield '';
+      }
+      yield '}';
+      yield '';
     }
   }
-  return;
 }
 
-export const buildStringEnumRuleClause: GuardClauseFactory = (param, rule) => {
-  if (rule.id === 'string-enum') {
-    const paramName = buildParameterName(param);
-    const values = `[${rule.values.map((v) => `"${v.value}"`).join(', ')}]`;
-
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'string'`,
-      `!${values}.includes(${name})`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(param, `"${paramName}" must be one of ${values}`),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildStringMaxLengthClause: GuardClauseFactory = (param, rule) => {
-  if (rule.id === 'string-max-length') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'string'`,
-      `${name}.length > ${rule.length.value}`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(param, `"${paramName}" max length is ${rule.length.value}`),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildStringMinLengthClause: GuardClauseFactory = (param, rule) => {
-  if (rule.id === 'string-min-length') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'string'`,
-      `${name}.length < ${rule.length.value}`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(param, `"${paramName}" min length is ${rule.length.value}`),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildStringPatternClause: GuardClauseFactory = (param, rule) => {
-  if (rule.id === 'string-pattern') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'string'`,
-      `/${rule.pattern.value}/.test(${name})`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(
-        param,
-        `"${paramName}" must match the pattern /${rule.pattern.value}/`,
-      ),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildNumberMultipleOfClause: GuardClauseFactory = (
-  param,
-  rule,
-) => {
-  if (rule.id === 'number-multiple-of') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'number'`,
-      `${name} % ${rule.value.value} !== 0`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(
-        param,
-        `"${paramName}" must be a multiple of ${rule.value.value}`,
-      ),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildNumberGreaterThanClause: GuardClauseFactory = (
-  param,
-  rule,
-) => {
-  if (rule.id === 'number-gt') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'number'`,
-      `${name} <= ${rule.value.value}`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(
-        param,
-        `"${paramName}" must be greater than ${rule.value.value}`,
-      ),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildNumberGreaterOrEqualClause: GuardClauseFactory = (
-  param,
-  rule,
-) => {
-  if (rule.id === 'number-gte') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'number'`,
-      `${name} < ${rule.value.value}`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(
-        param,
-        `"${paramName}" must be greater than or equal to ${rule.value.value}`,
-      ),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildNumberLessThanClause: GuardClauseFactory = (param, rule) => {
-  if (rule.id === 'number-lt') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'number'`,
-      `${name} >= ${rule.value.value}`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(
-        param,
-        `"${paramName}" must be less than ${rule.value.value}`,
-      ),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildNumberLessOrEqualClause: GuardClauseFactory = (
-  param,
-  rule,
-) => {
-  if (rule.id === 'number-lte') {
-    const paramName = buildParameterName(param);
-    const conditions = buildConditions(param, (name) => [
-      `typeof ${name} === 'number'`,
-      `${name} > ${rule.value.value}`,
-    ]);
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      buildMessage(
-        param,
-        `"${paramName}" must be less than or equal to ${rule.value.value}`,
-      ),
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildArrayMaxItemsClause: GuardClauseFactory = (param, rule) => {
-  if (rule.id === 'array-max-items') {
-    const paramName = buildParameterName(param);
-    const conditions = [
-      `Array.isArray(params.${paramName})`,
-      `params.${paramName}.length > ${rule.max.value}`,
-    ];
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      `"${paramName}" max length is ${rule.max.value}`,
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildArrayMinItemsClause: GuardClauseFactory = (param, rule) => {
-  if (rule.id === 'array-min-items') {
-    const paramName = buildParameterName(param);
-    const conditions = [
-      `Array.isArray(params.${paramName})`,
-      `params.${paramName}.length < ${rule.min.value}`,
-    ];
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      `"${paramName}" min length is ${rule.min.value}`,
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const buildArrayUniqueItemsClause: GuardClauseFactory = (
-  param,
-  rule,
-) => {
-  if (rule.id === 'array-unique-items') {
-    const paramName = buildParameterName(param);
-    const conditions = [
-      `Array.isArray(params.${paramName})`,
-      `params.${param.name.value}.length === new Set(${paramName}).length`,
-    ];
-
-    return `if(${conditions.join(' && ')}) {${buildError(
-      rule.id,
-      `"${paramName}" must contain unique values`,
-      paramName,
-    )}}`;
-  }
-  return;
-};
-
-export const defaultFactories = [
-  buildStringEnumRuleClause,
-  buildStringMaxLengthClause,
-  buildStringMinLengthClause,
-  buildStringPatternClause,
-  buildNumberMultipleOfClause,
-  buildNumberGreaterThanClause,
-  buildNumberGreaterOrEqualClause,
-  buildNumberLessThanClause,
-  buildNumberLessOrEqualClause,
-  buildArrayMaxItemsClause,
-  buildArrayMinItemsClause,
-  buildArrayUniqueItemsClause,
-];
+function sort<T extends { name: Scalar<string> }>(arr: T[]): T[] {
+  return [...arr].sort((a, b) => a.name.value.localeCompare(b.name.value));
+}

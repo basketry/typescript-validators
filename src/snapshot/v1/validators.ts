@@ -13,1061 +13,505 @@
  */
 
 import * as types from './types';
+import * as sanitizers from './sanitizers';
 
-export type ValidationError = { code: string; title: string; path: string };
+export type ValidationError = {
+  code:
+    | 'ARRAY_MAX_ITEMS'
+    | 'ARRAY_MIN_ITEMS'
+    | 'NUMBER_MULTIPLE_OF'
+    | 'REQUIRED'
+    | 'STRING_ENUM'
+    | 'STRING_MAX_LENGTH'
+    | 'STRING_PATTERN'
+    | 'TYPE';
+  title: string;
+  path: string;
+};
 
-/**
- * Validates input parameters for the getGizmos() method.
- */
-export function validateGetGizmosParams(params?: {
-  search?: string;
-}): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (!params) return [];
-  if (
-    typeof params.search !== 'undefined' &&
-    typeof params.search !== 'string'
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"search" must be a string if supplied',
-      path: 'search',
-    });
+type ValidationFunction = (
+  value: any,
+  path: string,
+  isRequired: boolean,
+) => ValidationError[];
+
+class Validator {
+  constructor(private readonly parentPath?: string) {}
+  private _errors: ValidationError[] = [];
+  get errors(): ValidationError[] {
+    return this._errors;
   }
-  return errors;
+
+  required(value: any, path: string) {
+    return {
+      ensure: (...validators: ValidationFunction[]) =>
+        this.run(value, path, [required, ...validators], true),
+    };
+  }
+
+  optional(value: any, path: string) {
+    return {
+      ensure: (...validators: ValidationFunction[]) =>
+        this.run(value, path, validators, false),
+    };
+  }
+
+  private run(
+    value: any,
+    path: string,
+    validators: ValidationFunction[],
+    isRequired: boolean,
+  ) {
+    for (const validator of validators) {
+      this._errors.push(
+        ...validator(
+          value,
+          this.parentPath ? `${this.parentPath}.${path}` : path,
+          isRequired,
+        ),
+      );
+    }
+  }
 }
 
-/**
- * Validates input parameters for the createGizmo() method.
- */
-export function validateCreateGizmoParams(params?: {
-  /**
-   * Anonymous enum
-   */
-  size?: types.CreateGizmoSize;
-}): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (!params) return [];
-  if (typeof params.size !== 'undefined') {
-    errors.push(...validateCreateGizmoSize(params.size));
+const required: ValidationFunction = (value, path) => {
+  if (typeof value === 'undefined') {
+    return [{ code: 'REQUIRED', title: `"${path}" is required`, path }];
   }
-  if (
-    typeof params.size === 'string' &&
-    !['small', 'medium', 'big', 'XL'].includes(params.size)
-  ) {
-    errors.push({
-      code: 'STRING_ENUM',
-      title: '"size" must be one of ["small", "medium", "big", "XL"]',
-      path: 'size',
-    });
-  }
-  return errors;
-}
+  return [];
+};
 
-/**
- * Validates input parameters for the updateGizmo() method.
- */
-export function validateUpdateGizmoParams(params?: {
-  /**
-   * array of primitive
-   */
-  factors?: string[];
-}): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (!params) return [];
-  if (
-    Array.isArray(params.factors) &&
-    params.factors.some((x) => typeof x !== 'string')
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: 'Each item in "factors" must be a string if supplied',
-      path: 'factors',
-    });
-  }
-  if (Array.isArray(params.factors) && params.factors.length > 6) {
-    errors.push({
-      code: 'ARRAY_MAX_ITEMS',
-      title: '"factors" max length is 6',
-      path: 'factors',
-    });
-  }
-  if (Array.isArray(params.factors) && params.factors.length < 2) {
-    errors.push({
-      code: 'ARRAY_MIN_ITEMS',
-      title: '"factors" min length is 2',
-      path: 'factors',
-    });
-  }
-  if (
-    Array.isArray(params.factors) &&
-    !params.factors.some((x) => typeof x === 'string' && /[0-9a-fA-F]+/.test(x))
-  ) {
-    errors.push({
-      code: 'STRING_PATTERN',
-      title: 'Each item in "factors" must match the pattern /[0-9a-fA-F]+/',
-      path: 'factors',
-    });
-  }
-  return errors;
-}
+const array: (...validators: ValidationFunction[]) => ValidationFunction =
+  (...validators) =>
+  (value, path, isRequired) => {
+    if (Array.isArray(value)) {
+      const errors: ValidationError[] = [];
 
-/**
- * Validates input parameters for the getWidgets() method.
- */
-export function validateGetWidgetsParams(): ValidationError[] {
+      for (const [index, item] of value.entries()) {
+        for (const validator of validators) {
+          errors.push(...validator(item, `${path}[${index}]`, isRequired));
+        }
+      }
+
+      return errors;
+    } else if (typeof value !== 'undefined') {
+      return [
+        {
+          code: 'TYPE',
+          title: `"${path}" must be an array${
+            isRequired ? '' : ' if supplied'
+          }`,
+          path,
+        },
+      ];
+    } else {
+      return [];
+    }
+  };
+const maxItems: (max: number) => ValidationFunction =
+  (max) => (value, path, isRequired) => {
+    if (Array.isArray(value) && value.length > max) {
+      return [
+        {
+          code: 'ARRAY_MAX_ITEMS',
+          title: `"${path}" must have at most ${max} items${
+            isRequired ? '' : ' if supplied'
+          }`,
+          path,
+        },
+      ];
+    }
+    return [];
+  };
+const minItems: (min: number) => ValidationFunction =
+  (min) => (value, path, isRequired) => {
+    if (Array.isArray(value) && value.length < min) {
+      return [
+        {
+          code: 'ARRAY_MIN_ITEMS',
+          title: `"${path}" must have at least ${min} items${
+            isRequired ? '' : ' if supplied'
+          }`,
+          path,
+        },
+      ];
+    }
+    return [];
+  };
+const using: (
+  validator: (value: any, parentPath?: string) => ValidationError[],
+) => ValidationFunction = (validator) => (value, path) =>
+  validator(value, path);
+
+function nativeType(
+  value: any,
+  path: string,
+  primitive: 'string' | 'number' | 'boolean',
+  isRequired: boolean,
+): ValidationError[] {
+  if (
+    typeof value !== primitive &&
+    (isRequired || typeof value !== 'undefined')
+  ) {
+    return [
+      {
+        code: 'TYPE',
+        title: `"${path}" must be a ${primitive}${
+          isRequired ? ' if supplied' : ''
+        }`,
+        path,
+      },
+    ];
+  }
   return [];
 }
 
-/**
- * Validates input parameters for the createWidget() method.
- */
-export function validateCreateWidgetParams(params?: {
-  /**
-   * The new widget
-   */
-  body?: types.CreateWidgetBody;
-}): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (!params) return [];
-  if (typeof params.body !== 'undefined') {
-    errors.push(...validateCreateWidgetBody(params.body));
-  }
-  return errors;
-}
+const string: ValidationFunction = (value, path, isRequred) => {
+  return nativeType(value, path, 'string', isRequred);
+};
 
-/**
- * Validates input parameters for the putWidget() method.
- */
-export function validatePutWidgetParams(): ValidationError[] {
+const number: ValidationFunction = (value, path, isRequred) => {
+  return nativeType(value, path, 'number', isRequred);
+};
+const integer: ValidationFunction = (value, path, isRequired) => {
+  if (
+    (typeof value === 'number' && value % 1 !== 0) ||
+    (typeof value !== 'number' && (isRequired || typeof value !== 'undefined'))
+  ) {
+    return [
+      {
+        code: 'TYPE',
+        title: `"${path}" must be an integer${
+          isRequired ? ' if supplied' : ''
+        }`,
+        path,
+      },
+    ];
+  }
   return [];
-}
+};
 
-/**
- * Validates input parameters for the getWidgetFoo() method.
- */
-export function validateGetWidgetFooParams(params: {
-  /**
-   * The widget ID
-   */
-  id: string;
-}): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (typeof params.id === 'undefined') {
-    errors.push({ code: 'REQUIRED', title: '"id" is required', path: 'id' });
-  }
-  if (typeof params.id !== 'undefined' && typeof params.id !== 'string') {
-    errors.push({ code: 'TYPE', title: '"id" must be a string', path: 'id' });
-  }
-  if (typeof params.id === 'string' && params.id.length > 30) {
-    errors.push({
-      code: 'STRING_MAX_LENGTH',
-      title: '"id" max length is 30',
-      path: 'id',
-    });
-  }
-  return errors;
-}
+const boolean: ValidationFunction = (value, path, isRequred) => {
+  return nativeType(value, path, 'boolean', isRequred);
+};
 
-/**
- * Validates input parameters for the deleteWidgetFoo() method.
- */
-export function validateDeleteWidgetFooParams(params: {
-  /**
-   * The widget ID
-   */
-  id: string;
-}): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (typeof params.id === 'undefined') {
-    errors.push({ code: 'REQUIRED', title: '"id" is required', path: 'id' });
+const date: ValidationFunction = (value, path, isRequired) => {
+  if (value instanceof Date) return [];
+  if (isRequired || typeof value !== 'undefined') {
+    return [
+      {
+        code: 'TYPE',
+        title: `"${path}" must be a Date${isRequired ? ' if supplied' : ''}`,
+        path,
+      },
+    ];
   }
-  if (typeof params.id !== 'undefined' && typeof params.id !== 'string') {
-    errors.push({ code: 'TYPE', title: '"id" must be a string', path: 'id' });
-  }
-  if (typeof params.id === 'string' && params.id.length > 30) {
-    errors.push({
-      code: 'STRING_MAX_LENGTH',
-      title: '"id" max length is 30',
-      path: 'id',
-    });
-  }
-  return errors;
-}
+  return [];
+};
 
-/**
- * Validates input parameters for the exhaustiveFormats() method.
- */
-export function validateExhaustiveFormatsParams(params?: {
-  stringNoFormat?: string;
-  stringDate?: Date;
-  stringDateTime?: Date;
-  integerNoFormat?: number;
-  integerInt32?: number;
-  integerInt64?: number;
-  numberNoFormat?: number;
-  numberFloat?: number;
-  numberDouble?: number;
-}): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (!params) return [];
-  if (
-    typeof params.stringNoFormat !== 'undefined' &&
-    typeof params.stringNoFormat !== 'string'
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"stringNoFormat" must be a string if supplied',
-      path: 'stringNoFormat',
-    });
-  }
-  if (
-    typeof params.stringDate !== 'undefined' &&
-    !(params.stringDate instanceof Date)
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"stringDate" must be a Date if supplied',
-      path: 'stringDate',
-    });
-  }
-  if (
-    typeof params.stringDateTime !== 'undefined' &&
-    !(params.stringDateTime instanceof Date)
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"stringDateTime" must be a Date if supplied',
-      path: 'stringDateTime',
-    });
-  }
-  if (
-    typeof params.integerNoFormat !== 'undefined' &&
-    (typeof params.integerNoFormat !== 'number' ||
-      Number.isNaN(params.integerNoFormat))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"integerNoFormat" must be a number if supplied',
-      path: 'integerNoFormat',
-    });
-  }
-  if (
-    typeof params.integerInt32 !== 'undefined' &&
-    (typeof params.integerInt32 !== 'number' ||
-      Number.isNaN(params.integerInt32))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"integerInt32" must be a number if supplied',
-      path: 'integerInt32',
-    });
-  }
-  if (
-    typeof params.integerInt64 !== 'undefined' &&
-    (typeof params.integerInt64 !== 'number' ||
-      Number.isNaN(params.integerInt64))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"integerInt64" must be a number if supplied',
-      path: 'integerInt64',
-    });
-  }
-  if (
-    typeof params.numberNoFormat !== 'undefined' &&
-    (typeof params.numberNoFormat !== 'number' ||
-      Number.isNaN(params.numberNoFormat))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"numberNoFormat" must be a number if supplied',
-      path: 'numberNoFormat',
-    });
-  }
-  if (
-    typeof params.numberFloat !== 'undefined' &&
-    (typeof params.numberFloat !== 'number' || Number.isNaN(params.numberFloat))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"numberFloat" must be a number if supplied',
-      path: 'numberFloat',
-    });
-  }
-  if (
-    typeof params.numberDouble !== 'undefined' &&
-    (typeof params.numberDouble !== 'number' ||
-      Number.isNaN(params.numberDouble))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"numberDouble" must be a number if supplied',
-      path: 'numberDouble',
-    });
-  }
-  return errors;
-}
+const maxLength: (max: number) => ValidationFunction =
+  (max) => (value, path, isRequired) => {
+    if (typeof value === 'string' && value.length > max) {
+      return [
+        {
+          code: 'STRING_MAX_LENGTH',
+          title: `"${path}" must be at most ${max} characters${
+            isRequired ? '' : ' if supplied'
+          }`,
+          path,
+        },
+      ];
+    }
+    return [];
+  };
 
-/**
- * Validates input parameters for the exhaustiveParams() method.
- */
-export function validateExhaustiveParamsParams(params: {
-  pathString: string;
-  pathEnum: types.ExhaustiveParamsPathEnum;
-  pathNumber: number;
-  pathInteger: number;
-  pathBoolean: boolean;
-  pathStringArray: string[];
-  pathEnumArray: types.ExhaustiveParamsPathEnumArray[];
-  pathNumberArray: number[];
-  pathIntegerArray: number[];
-  pathBooleanArray: boolean[];
-  queryString?: string;
-  queryEnum?: types.ExhaustiveParamsQueryEnum;
-  queryNumber?: number;
-  queryInteger?: number;
-  queryBoolean?: boolean;
-  queryStringArray?: string[];
-  queryEnumArray?: types.ExhaustiveParamsQueryEnumArray[];
-  queryNumberArray?: number[];
-  queryIntegerArray?: number[];
-  queryBooleanArray?: boolean[];
-  headerString?: string;
-  headerEnum?: types.ExhaustiveParamsHeaderEnum;
-  headerNumber?: number;
-  headerInteger?: number;
-  headerBoolean?: boolean;
-  headerStringArray?: string[];
-  headerEnumArray?: types.ExhaustiveParamsHeaderEnumArray[];
-  headerNumberArray?: number[];
-  headerIntegerArray?: number[];
-  headerBooleanArray?: boolean[];
-  body?: types.ExhaustiveParamsBody;
-}): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (
-    typeof params.queryString !== 'undefined' &&
-    typeof params.queryString !== 'string'
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"queryString" must be a string if supplied',
-      path: 'queryString',
-    });
-  }
-  if (typeof params.queryEnum !== 'undefined') {
-    errors.push(...validateExhaustiveParamsQueryEnum(params.queryEnum));
-  }
-  if (
-    typeof params.queryEnum === 'string' &&
-    !['one', 'two', 'three'].includes(params.queryEnum)
-  ) {
-    errors.push({
-      code: 'STRING_ENUM',
-      title: '"queryEnum" must be one of ["one", "two", "three"]',
-      path: 'queryEnum',
-    });
-  }
-  if (
-    typeof params.queryNumber !== 'undefined' &&
-    (typeof params.queryNumber !== 'number' || Number.isNaN(params.queryNumber))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"queryNumber" must be a number if supplied',
-      path: 'queryNumber',
-    });
-  }
-  if (
-    typeof params.queryInteger !== 'undefined' &&
-    (typeof params.queryInteger !== 'number' ||
-      Number.isNaN(params.queryInteger))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"queryInteger" must be a number if supplied',
-      path: 'queryInteger',
-    });
-  }
-  if (
-    typeof params.queryBoolean !== 'undefined' &&
-    typeof params.queryBoolean !== 'boolean'
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"queryBoolean" must be a boolean if supplied',
-      path: 'queryBoolean',
-    });
-  }
-  if (
-    Array.isArray(params.queryStringArray) &&
-    params.queryStringArray.some((x) => typeof x !== 'string')
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: 'Each item in "queryStringArray" must be a string if supplied',
-      path: 'queryStringArray',
-    });
-  }
-  if (typeof params.queryEnumArray !== 'undefined') {
-    params.queryEnumArray.forEach((arrayItem) =>
-      errors.push(...validateExhaustiveParamsQueryEnumArray(arrayItem)),
-    );
-  }
-  if (
-    Array.isArray(params.queryEnumArray) &&
-    !params.queryEnumArray.some(
-      (x) => typeof x === 'string' && !['one', 'two', 'three'].includes(x),
-    )
-  ) {
-    errors.push({
-      code: 'STRING_ENUM',
-      title:
-        'Each item in "queryEnumArray" must be one of ["one", "two", "three"]',
-      path: 'queryEnumArray',
-    });
-  }
-  if (
-    Array.isArray(params.queryNumberArray) &&
-    params.queryNumberArray.some(
-      (x) => typeof x !== 'number' || Number.isNaN(x),
-    )
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: 'Each item in "queryNumberArray" must be a number if supplied',
-      path: 'queryNumberArray',
-    });
-  }
-  if (
-    Array.isArray(params.queryIntegerArray) &&
-    params.queryIntegerArray.some(
-      (x) => typeof x !== 'number' || Number.isNaN(x),
-    )
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: 'Each item in "queryIntegerArray" must be a number if supplied',
-      path: 'queryIntegerArray',
-    });
-  }
-  if (
-    Array.isArray(params.queryBooleanArray) &&
-    params.queryBooleanArray.some((x) => typeof x !== 'boolean')
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: 'Each item in "queryBooleanArray" must be a boolean if supplied',
-      path: 'queryBooleanArray',
-    });
-  }
-  if (typeof params.pathString === 'undefined') {
-    errors.push({
-      code: 'REQUIRED',
-      title: '"pathString" is required',
-      path: 'pathString',
-    });
-  }
-  if (
-    typeof params.pathString !== 'undefined' &&
-    typeof params.pathString !== 'string'
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"pathString" must be a string',
-      path: 'pathString',
-    });
-  }
-  if (typeof params.pathEnum === 'undefined') {
-    errors.push({
-      code: 'REQUIRED',
-      title: '"pathEnum" is required',
-      path: 'pathEnum',
-    });
-  }
-  if (typeof params.pathEnum !== 'undefined') {
-    errors.push(...validateExhaustiveParamsPathEnum(params.pathEnum));
-  }
-  if (
-    typeof params.pathEnum === 'string' &&
-    !['one', 'two', 'three'].includes(params.pathEnum)
-  ) {
-    errors.push({
-      code: 'STRING_ENUM',
-      title: '"pathEnum" must be one of ["one", "two", "three"]',
-      path: 'pathEnum',
-    });
-  }
-  if (typeof params.pathNumber === 'undefined') {
-    errors.push({
-      code: 'REQUIRED',
-      title: '"pathNumber" is required',
-      path: 'pathNumber',
-    });
-  }
-  if (
-    typeof params.pathNumber !== 'undefined' &&
-    (typeof params.pathNumber !== 'number' || Number.isNaN(params.pathNumber))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"pathNumber" must be a number',
-      path: 'pathNumber',
-    });
-  }
-  if (typeof params.pathInteger === 'undefined') {
-    errors.push({
-      code: 'REQUIRED',
-      title: '"pathInteger" is required',
-      path: 'pathInteger',
-    });
-  }
-  if (
-    typeof params.pathInteger !== 'undefined' &&
-    (typeof params.pathInteger !== 'number' || Number.isNaN(params.pathInteger))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"pathInteger" must be a number',
-      path: 'pathInteger',
-    });
-  }
-  if (typeof params.pathBoolean === 'undefined') {
-    errors.push({
-      code: 'REQUIRED',
-      title: '"pathBoolean" is required',
-      path: 'pathBoolean',
-    });
-  }
-  if (
-    typeof params.pathBoolean !== 'undefined' &&
-    typeof params.pathBoolean !== 'boolean'
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"pathBoolean" must be a boolean',
-      path: 'pathBoolean',
-    });
-  }
-  if (typeof params.pathStringArray === 'undefined') {
-    errors.push({
-      code: 'REQUIRED',
-      title: '"pathStringArray" is required',
-      path: 'pathStringArray',
-    });
-  }
-  if (
-    Array.isArray(params.pathStringArray) &&
-    params.pathStringArray.some((x) => typeof x !== 'string')
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: 'Each item in "pathStringArray" must be a string',
-      path: 'pathStringArray',
-    });
-  }
-  if (typeof params.pathEnumArray === 'undefined') {
-    errors.push({
-      code: 'REQUIRED',
-      title: '"pathEnumArray" is required',
-      path: 'pathEnumArray',
-    });
-  }
-  if (typeof params.pathEnumArray !== 'undefined') {
-    params.pathEnumArray.forEach((arrayItem) =>
-      errors.push(...validateExhaustiveParamsPathEnumArray(arrayItem)),
-    );
-  }
-  if (
-    Array.isArray(params.pathEnumArray) &&
-    !params.pathEnumArray.some(
-      (x) => typeof x === 'string' && !['one', 'two', 'three'].includes(x),
-    )
-  ) {
-    errors.push({
-      code: 'STRING_ENUM',
-      title:
-        'Each item in "pathEnumArray" must be one of ["one", "two", "three"]',
-      path: 'pathEnumArray',
-    });
-  }
-  if (typeof params.pathNumberArray === 'undefined') {
-    errors.push({
-      code: 'REQUIRED',
-      title: '"pathNumberArray" is required',
-      path: 'pathNumberArray',
-    });
-  }
-  if (
-    Array.isArray(params.pathNumberArray) &&
-    params.pathNumberArray.some((x) => typeof x !== 'number' || Number.isNaN(x))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: 'Each item in "pathNumberArray" must be a number',
-      path: 'pathNumberArray',
-    });
-  }
-  if (typeof params.pathIntegerArray === 'undefined') {
-    errors.push({
-      code: 'REQUIRED',
-      title: '"pathIntegerArray" is required',
-      path: 'pathIntegerArray',
-    });
-  }
-  if (
-    Array.isArray(params.pathIntegerArray) &&
-    params.pathIntegerArray.some(
-      (x) => typeof x !== 'number' || Number.isNaN(x),
-    )
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: 'Each item in "pathIntegerArray" must be a number',
-      path: 'pathIntegerArray',
-    });
-  }
-  if (typeof params.pathBooleanArray === 'undefined') {
-    errors.push({
-      code: 'REQUIRED',
-      title: '"pathBooleanArray" is required',
-      path: 'pathBooleanArray',
-    });
-  }
-  if (
-    Array.isArray(params.pathBooleanArray) &&
-    params.pathBooleanArray.some((x) => typeof x !== 'boolean')
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: 'Each item in "pathBooleanArray" must be a boolean',
-      path: 'pathBooleanArray',
-    });
-  }
-  if (
-    typeof params.headerString !== 'undefined' &&
-    typeof params.headerString !== 'string'
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"headerString" must be a string if supplied',
-      path: 'headerString',
-    });
-  }
-  if (typeof params.headerEnum !== 'undefined') {
-    errors.push(...validateExhaustiveParamsHeaderEnum(params.headerEnum));
-  }
-  if (
-    typeof params.headerEnum === 'string' &&
-    !['one', 'two', 'three'].includes(params.headerEnum)
-  ) {
-    errors.push({
-      code: 'STRING_ENUM',
-      title: '"headerEnum" must be one of ["one", "two", "three"]',
-      path: 'headerEnum',
-    });
-  }
-  if (
-    typeof params.headerNumber !== 'undefined' &&
-    (typeof params.headerNumber !== 'number' ||
-      Number.isNaN(params.headerNumber))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"headerNumber" must be a number if supplied',
-      path: 'headerNumber',
-    });
-  }
-  if (
-    typeof params.headerInteger !== 'undefined' &&
-    (typeof params.headerInteger !== 'number' ||
-      Number.isNaN(params.headerInteger))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"headerInteger" must be a number if supplied',
-      path: 'headerInteger',
-    });
-  }
-  if (
-    typeof params.headerBoolean !== 'undefined' &&
-    typeof params.headerBoolean !== 'boolean'
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"headerBoolean" must be a boolean if supplied',
-      path: 'headerBoolean',
-    });
-  }
-  if (
-    Array.isArray(params.headerStringArray) &&
-    params.headerStringArray.some((x) => typeof x !== 'string')
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: 'Each item in "headerStringArray" must be a string if supplied',
-      path: 'headerStringArray',
-    });
-  }
-  if (typeof params.headerEnumArray !== 'undefined') {
-    params.headerEnumArray.forEach((arrayItem) =>
-      errors.push(...validateExhaustiveParamsHeaderEnumArray(arrayItem)),
-    );
-  }
-  if (
-    Array.isArray(params.headerEnumArray) &&
-    !params.headerEnumArray.some(
-      (x) => typeof x === 'string' && !['one', 'two', 'three'].includes(x),
-    )
-  ) {
-    errors.push({
-      code: 'STRING_ENUM',
-      title:
-        'Each item in "headerEnumArray" must be one of ["one", "two", "three"]',
-      path: 'headerEnumArray',
-    });
-  }
-  if (
-    Array.isArray(params.headerNumberArray) &&
-    params.headerNumberArray.some(
-      (x) => typeof x !== 'number' || Number.isNaN(x),
-    )
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: 'Each item in "headerNumberArray" must be a number if supplied',
-      path: 'headerNumberArray',
-    });
-  }
-  if (
-    Array.isArray(params.headerIntegerArray) &&
-    params.headerIntegerArray.some(
-      (x) => typeof x !== 'number' || Number.isNaN(x),
-    )
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: 'Each item in "headerIntegerArray" must be a number if supplied',
-      path: 'headerIntegerArray',
-    });
-  }
-  if (
-    Array.isArray(params.headerBooleanArray) &&
-    params.headerBooleanArray.some((x) => typeof x !== 'boolean')
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: 'Each item in "headerBooleanArray" must be a boolean if supplied',
-      path: 'headerBooleanArray',
-    });
-  }
-  if (typeof params.body !== 'undefined') {
-    errors.push(...validateExhaustiveParamsBody(params.body));
-  }
-  return errors;
-}
+const pattern: (regex: RegExp) => ValidationFunction =
+  (regex) => (value, path, isRequired) => {
+    if (typeof value === 'string' && !regex.test(value)) {
+      return [
+        {
+          code: 'STRING_PATTERN',
+          title: `"${path}" must match the pattern "${regex}"${
+            isRequired ? '' : ' if supplied'
+          }`,
+          path,
+        },
+      ];
+    }
+    return [];
+  };
+const multipleOf: (factor: number) => ValidationFunction =
+  (factor) => (value, path, isRequired) => {
+    if (isRequired || typeof value !== 'undefined') {
+      if (typeof value === 'number' && value % factor !== 0) {
+        return [
+          {
+            code: 'NUMBER_MULTIPLE_OF',
+            title: `"${path}" must be a multiple of ${factor}${
+              isRequired ? '' : ' if supplied'
+            }`,
+            path,
+          },
+        ];
+      }
+    }
+    return [];
+  };
 
 /**
  * Validates input parameters for the allAuthSchemes() method.
  */
-export function validateAllAuthSchemesParams(): ValidationError[] {
-  return [];
+export function validateAllAuthSchemesParams(
+  parentPath?: string,
+): ValidationError[] {
+  const validator = new Validator(parentPath);
+
+  return validator.errors;
 }
 
 /**
  * Validates input parameters for the comboAuthSchemes() method.
  */
-export function validateComboAuthSchemesParams(): ValidationError[] {
-  return [];
-}
-
-export function validateGizmo(params: types.Gizmo): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (typeof params.id !== 'undefined' && typeof params.id !== 'string') {
-    errors.push({
-      code: 'TYPE',
-      title: '"id" must be a string if supplied',
-      path: 'id',
-    });
-  }
-  if (typeof params.id === 'string' && params.id.length > 30) {
-    errors.push({
-      code: 'STRING_MAX_LENGTH',
-      title: '"id" max length is 30',
-      path: 'id',
-    });
-  }
-  if (typeof params.name !== 'undefined' && typeof params.name !== 'string') {
-    errors.push({
-      code: 'TYPE',
-      title: '"name" must be a string if supplied',
-      path: 'name',
-    });
-  }
-  if (typeof params.size !== 'undefined') {
-    errors.push(...validateProductSize(params.size));
-  }
-  if (
-    typeof params.size === 'string' &&
-    !['small', 'medium', 'large'].includes(params.size)
-  ) {
-    errors.push({
-      code: 'STRING_ENUM',
-      title: '"size" must be one of ["small", "medium", "large"]',
-      path: 'size',
-    });
-  }
-  return errors;
-}
-export function isGizmo(obj: any): obj is types.Gizmo {
-  return typeof obj !== 'undefined' && !validateGizmo(obj).length;
-}
-
-export function validateWidget(params: types.Widget): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (typeof params.id === 'undefined') {
-    errors.push({ code: 'REQUIRED', title: '"id" is required', path: 'id' });
-  }
-  if (typeof params.id !== 'undefined' && typeof params.id !== 'string') {
-    errors.push({ code: 'TYPE', title: '"id" must be a string', path: 'id' });
-  }
-  if (typeof params.id === 'string' && params.id.length > 30) {
-    errors.push({
-      code: 'STRING_MAX_LENGTH',
-      title: '"id" max length is 30',
-      path: 'id',
-    });
-  }
-  if (typeof params.name !== 'undefined' && typeof params.name !== 'string') {
-    errors.push({
-      code: 'TYPE',
-      title: '"name" must be a string if supplied',
-      path: 'name',
-    });
-  }
-  if (typeof params.name === 'string' && params.name.length > 30) {
-    errors.push({
-      code: 'STRING_MAX_LENGTH',
-      title: '"name" max length is 30',
-      path: 'name',
-    });
-  }
-  if (typeof params.name === 'string' && /[0-9a-fA-F]+/.test(params.name)) {
-    errors.push({
-      code: 'STRING_PATTERN',
-      title: '"name" must match the pattern /[0-9a-fA-F]+/',
-      path: 'name',
-    });
-  }
-  if (typeof params.fiz === 'undefined') {
-    errors.push({ code: 'REQUIRED', title: '"fiz" is required', path: 'fiz' });
-  }
-  if (
-    typeof params.fiz !== 'undefined' &&
-    (typeof params.fiz !== 'number' || Number.isNaN(params.fiz))
-  ) {
-    errors.push({ code: 'TYPE', title: '"fiz" must be a number', path: 'fiz' });
-  }
-  if (typeof params.fiz === 'number' && params.fiz % 3 !== 0) {
-    errors.push({
-      code: 'NUMBER_MULTIPLE_OF',
-      title: '"fiz" must be a multiple of 3',
-      path: 'fiz',
-    });
-  }
-  if (
-    typeof params.buzz !== 'undefined' &&
-    (typeof params.buzz !== 'number' || Number.isNaN(params.buzz))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"buzz" must be a number if supplied',
-      path: 'buzz',
-    });
-  }
-  if (typeof params.buzz === 'number' && params.buzz % 5 !== 0) {
-    errors.push({
-      code: 'NUMBER_MULTIPLE_OF',
-      title: '"buzz" must be a multiple of 5',
-      path: 'buzz',
-    });
-  }
-  if (
-    typeof params.fizbuzz !== 'undefined' &&
-    (typeof params.fizbuzz !== 'number' || Number.isNaN(params.fizbuzz))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"fizbuzz" must be a number if supplied',
-      path: 'fizbuzz',
-    });
-  }
-  if (typeof params.fizbuzz === 'number' && params.fizbuzz % 15 !== 0) {
-    errors.push({
-      code: 'NUMBER_MULTIPLE_OF',
-      title: '"fizbuzz" must be a multiple of 15',
-      path: 'fizbuzz',
-    });
-  }
-  if (typeof params.foo !== 'undefined') {
-    errors.push(...validateWidgetFoo(params.foo));
-  }
-  if (typeof params.size !== 'undefined') {
-    errors.push(...validateProductSize(params.size));
-  }
-  if (
-    typeof params.size === 'string' &&
-    !['small', 'medium', 'large'].includes(params.size)
-  ) {
-    errors.push({
-      code: 'STRING_ENUM',
-      title: '"size" must be one of ["small", "medium", "large"]',
-      path: 'size',
-    });
-  }
-  return errors;
-}
-export function isWidget(obj: any): obj is types.Widget {
-  return typeof obj !== 'undefined' && !validateWidget(obj).length;
-}
-
-export function validateNewWidget(params: types.NewWidget): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (typeof params.name !== 'undefined' && typeof params.name !== 'string') {
-    errors.push({
-      code: 'TYPE',
-      title: '"name" must be a string if supplied',
-      path: 'name',
-    });
-  }
-  if (typeof params.name === 'string' && params.name.length > 30) {
-    errors.push({
-      code: 'STRING_MAX_LENGTH',
-      title: '"name" max length is 30',
-      path: 'name',
-    });
-  }
-  if (typeof params.name === 'string' && /[0-9a-fA-F]+/.test(params.name)) {
-    errors.push({
-      code: 'STRING_PATTERN',
-      title: '"name" must match the pattern /[0-9a-fA-F]+/',
-      path: 'name',
-    });
-  }
-  if (typeof params.fiz === 'undefined') {
-    errors.push({ code: 'REQUIRED', title: '"fiz" is required', path: 'fiz' });
-  }
-  if (
-    typeof params.fiz !== 'undefined' &&
-    (typeof params.fiz !== 'number' || Number.isNaN(params.fiz))
-  ) {
-    errors.push({ code: 'TYPE', title: '"fiz" must be a number', path: 'fiz' });
-  }
-  if (typeof params.fiz === 'number' && params.fiz % 3 !== 0) {
-    errors.push({
-      code: 'NUMBER_MULTIPLE_OF',
-      title: '"fiz" must be a multiple of 3',
-      path: 'fiz',
-    });
-  }
-  if (
-    typeof params.buzz !== 'undefined' &&
-    (typeof params.buzz !== 'number' || Number.isNaN(params.buzz))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"buzz" must be a number if supplied',
-      path: 'buzz',
-    });
-  }
-  if (typeof params.buzz === 'number' && params.buzz % 5 !== 0) {
-    errors.push({
-      code: 'NUMBER_MULTIPLE_OF',
-      title: '"buzz" must be a multiple of 5',
-      path: 'buzz',
-    });
-  }
-  if (
-    typeof params.fizbuzz !== 'undefined' &&
-    (typeof params.fizbuzz !== 'number' || Number.isNaN(params.fizbuzz))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"fizbuzz" must be a number if supplied',
-      path: 'fizbuzz',
-    });
-  }
-  if (typeof params.fizbuzz === 'number' && params.fizbuzz % 15 !== 0) {
-    errors.push({
-      code: 'NUMBER_MULTIPLE_OF',
-      title: '"fizbuzz" must be a multiple of 15',
-      path: 'fizbuzz',
-    });
-  }
-  if (typeof params.foo !== 'undefined') {
-    errors.push(...validateNewWidgetFoo(params.foo));
-  }
-  if (typeof params.size !== 'undefined') {
-    errors.push(...validateProductSize(params.size));
-  }
-  if (
-    typeof params.size === 'string' &&
-    !['small', 'medium', 'large'].includes(params.size)
-  ) {
-    errors.push({
-      code: 'STRING_ENUM',
-      title: '"size" must be one of ["small", "medium", "large"]',
-      path: 'size',
-    });
-  }
-  return errors;
-}
-export function isNewWidget(obj: any): obj is types.NewWidget {
-  return typeof obj !== 'undefined' && !validateNewWidget(obj).length;
-}
-
-export function validateGizmosResponse(
-  params: types.GizmosResponse,
+export function validateComboAuthSchemesParams(
+  parentPath?: string,
 ): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (typeof params.data === 'undefined') {
-    errors.push({
-      code: 'REQUIRED',
-      title: '"data" is required',
-      path: 'data',
-    });
-  }
-  if (typeof params.data !== 'undefined') {
-    params.data.forEach((arrayItem) =>
-      errors.push(...validateGizmo(arrayItem)),
-    );
-  }
-  return errors;
+  const validator = new Validator(parentPath);
+
+  return validator.errors;
 }
-export function isGizmosResponse(obj: any): obj is types.GizmosResponse {
-  return typeof obj !== 'undefined' && !validateGizmosResponse(obj).length;
+
+/**
+ * Validates input parameters for the createGizmo() method.
+ */
+export function validateCreateGizmoParams(
+  params?: types.CreateGizmoParams,
+  parentPath?: string,
+): ValidationError[] {
+  if (!params) return [];
+  const validator = new Validator(parentPath);
+
+  validator
+    .optional(params.size, 'size')
+    .ensure(using(validateCreateGizmoSize));
+
+  return validator.errors;
+}
+
+/**
+ * Validates input parameters for the createWidget() method.
+ */
+export function validateCreateWidgetParams(
+  params?: types.CreateWidgetParams,
+  parentPath?: string,
+): ValidationError[] {
+  if (!params) return [];
+  const validator = new Validator(parentPath);
+
+  validator
+    .optional(params.body, 'body')
+    .ensure(using(validateCreateWidgetBody));
+
+  return validator.errors;
+}
+
+/**
+ * Validates input parameters for the deleteWidgetFoo() method.
+ */
+export function validateDeleteWidgetFooParams(
+  params: types.DeleteWidgetFooParams,
+  parentPath?: string,
+): ValidationError[] {
+  const validator = new Validator(parentPath);
+
+  validator.required(params.id, 'id').ensure(string, maxLength(30));
+
+  return validator.errors;
+}
+
+/**
+ * Validates input parameters for the exhaustiveFormats() method.
+ */
+export function validateExhaustiveFormatsParams(
+  params?: types.ExhaustiveFormatsParams,
+  parentPath?: string,
+): ValidationError[] {
+  if (!params) return [];
+  const validator = new Validator(parentPath);
+
+  validator.optional(params.integerInt32, 'integer-int32').ensure(integer);
+  validator.optional(params.integerInt64, 'integer-int64').ensure(integer);
+  validator
+    .optional(params.integerNoFormat, 'integer-no-format')
+    .ensure(integer);
+  validator.optional(params.numberDouble, 'number-double').ensure(number);
+  validator.optional(params.numberFloat, 'number-float').ensure(number);
+  validator.optional(params.numberNoFormat, 'number-no-format').ensure(number);
+  validator.optional(params.stringDate, 'string-date').ensure(date);
+  validator.optional(params.stringDateTime, 'string-date-time').ensure(date);
+  validator.optional(params.stringNoFormat, 'string-no-format').ensure(string);
+
+  return validator.errors;
+}
+
+/**
+ * Validates input parameters for the exhaustiveParams() method.
+ */
+export function validateExhaustiveParamsParams(
+  params: types.ExhaustiveParamsParams,
+  parentPath?: string,
+): ValidationError[] {
+  const validator = new Validator(parentPath);
+
+  validator
+    .optional(params.body, 'body')
+    .ensure(using(validateExhaustiveParamsBody));
+  validator.optional(params.headerBoolean, 'header-boolean').ensure(boolean);
+  validator
+    .optional(params.headerBooleanArray, 'header-boolean-array')
+    .ensure(array(boolean));
+  validator
+    .optional(params.headerEnum, 'header-enum')
+    .ensure(using(validateExhaustiveParamsHeaderEnum));
+  validator
+    .optional(params.headerEnumArray, 'header-enum-array')
+    .ensure(array(using(validateExhaustiveParamsHeaderEnumArray)));
+  validator.optional(params.headerInteger, 'header-integer').ensure(integer);
+  validator
+    .optional(params.headerIntegerArray, 'header-integer-array')
+    .ensure(array(integer));
+  validator.optional(params.headerNumber, 'header-number').ensure(number);
+  validator
+    .optional(params.headerNumberArray, 'header-number-array')
+    .ensure(array(number));
+  validator.optional(params.headerString, 'header-string').ensure(string);
+  validator
+    .optional(params.headerStringArray, 'header-string-array')
+    .ensure(array(string));
+  validator.required(params.pathBoolean, 'path-boolean').ensure(boolean);
+  validator
+    .required(params.pathBooleanArray, 'path-boolean-array')
+    .ensure(array(boolean));
+  validator
+    .required(params.pathEnum, 'path-enum')
+    .ensure(using(validateExhaustiveParamsPathEnum));
+  validator
+    .required(params.pathEnumArray, 'path-enum-array')
+    .ensure(array(using(validateExhaustiveParamsPathEnumArray)));
+  validator.required(params.pathInteger, 'path-integer').ensure(integer);
+  validator
+    .required(params.pathIntegerArray, 'path-integer-array')
+    .ensure(array(integer));
+  validator.required(params.pathNumber, 'path-number').ensure(number);
+  validator
+    .required(params.pathNumberArray, 'path-number-array')
+    .ensure(array(number));
+  validator.required(params.pathString, 'path-string').ensure(string);
+  validator
+    .required(params.pathStringArray, 'path-string-array')
+    .ensure(array(string));
+  validator.optional(params.queryBoolean, 'query-boolean').ensure(boolean);
+  validator
+    .optional(params.queryBooleanArray, 'query-boolean-array')
+    .ensure(array(boolean));
+  validator
+    .optional(params.queryEnum, 'query-enum')
+    .ensure(using(validateExhaustiveParamsQueryEnum));
+  validator
+    .optional(params.queryEnumArray, 'query-enum-array')
+    .ensure(array(using(validateExhaustiveParamsQueryEnumArray)));
+  validator.optional(params.queryInteger, 'query-integer').ensure(integer);
+  validator
+    .optional(params.queryIntegerArray, 'query-integer-array')
+    .ensure(array(integer));
+  validator.optional(params.queryNumber, 'query-number').ensure(number);
+  validator
+    .optional(params.queryNumberArray, 'query-number-array')
+    .ensure(array(number));
+  validator.optional(params.queryString, 'query-string').ensure(string);
+  validator
+    .optional(params.queryStringArray, 'query-string-array')
+    .ensure(array(string));
+
+  return validator.errors;
+}
+
+/**
+ * Validates input parameters for the getGizmos() method.
+ */
+export function validateGetGizmosParams(
+  params?: types.GetGizmosParams,
+  parentPath?: string,
+): ValidationError[] {
+  if (!params) return [];
+  const validator = new Validator(parentPath);
+
+  validator.optional(params.search, 'search').ensure(string);
+
+  return validator.errors;
+}
+
+/**
+ * Validates input parameters for the getWidgetFoo() method.
+ */
+export function validateGetWidgetFooParams(
+  params: types.GetWidgetFooParams,
+  parentPath?: string,
+): ValidationError[] {
+  const validator = new Validator(parentPath);
+
+  validator.required(params.id, 'id').ensure(string, maxLength(30));
+
+  return validator.errors;
+}
+
+/**
+ * Validates input parameters for the getWidgets() method.
+ */
+export function validateGetWidgetsParams(
+  parentPath?: string,
+): ValidationError[] {
+  const validator = new Validator(parentPath);
+
+  return validator.errors;
+}
+
+/**
+ * Validates input parameters for the putWidget() method.
+ */
+export function validatePutWidgetParams(
+  parentPath?: string,
+): ValidationError[] {
+  const validator = new Validator(parentPath);
+
+  return validator.errors;
+}
+
+/**
+ * Validates input parameters for the updateGizmo() method.
+ */
+export function validateUpdateGizmoParams(
+  params?: types.UpdateGizmoParams,
+  parentPath?: string,
+): ValidationError[] {
+  if (!params) return [];
+  const validator = new Validator(parentPath);
+
+  validator
+    .optional(params.factors, 'factors')
+    .ensure(maxItems(6), minItems(2), array(string, pattern(/[0-9a-fA-F]+/)));
+
+  return validator.errors;
 }
 
 export function validateCreateWidgetBody(
   params: types.CreateWidgetBody,
+  parentPath?: string,
 ): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (typeof params.name === 'undefined') {
-    errors.push({
-      code: 'REQUIRED',
-      title: '"name" is required',
-      path: 'name',
-    });
-  }
-  if (typeof params.name !== 'undefined' && typeof params.name !== 'string') {
-    errors.push({
-      code: 'TYPE',
-      title: '"name" must be a string',
-      path: 'name',
-    });
-  }
-  return errors;
+  const validator = new Validator(parentPath);
+
+  validator.required(params.name, 'name').ensure(string);
+
+  return validator.errors;
 }
 export function isCreateWidgetBody(obj: any): obj is types.CreateWidgetBody {
   return typeof obj !== 'undefined' && !validateCreateWidgetBody(obj).length;
@@ -1075,23 +519,14 @@ export function isCreateWidgetBody(obj: any): obj is types.CreateWidgetBody {
 
 export function validateExhaustiveParamsBody(
   params: types.ExhaustiveParamsBody,
+  parentPath?: string,
 ): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (typeof params.foo !== 'undefined' && typeof params.foo !== 'string') {
-    errors.push({
-      code: 'TYPE',
-      title: '"foo" must be a string if supplied',
-      path: 'foo',
-    });
-  }
-  if (typeof params.bar !== 'undefined' && typeof params.bar !== 'string') {
-    errors.push({
-      code: 'TYPE',
-      title: '"bar" must be a string if supplied',
-      path: 'bar',
-    });
-  }
-  return errors;
+  const validator = new Validator(parentPath);
+
+  validator.optional(params.bar, 'bar').ensure(string);
+  validator.optional(params.foo, 'foo').ensure(string);
+
+  return validator.errors;
 }
 export function isExhaustiveParamsBody(
   obj: any,
@@ -1101,76 +536,107 @@ export function isExhaustiveParamsBody(
   );
 }
 
-export function validateWidgetFoo(params: types.WidgetFoo): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (
-    typeof params.fiz !== 'undefined' &&
-    (typeof params.fiz !== 'number' || Number.isNaN(params.fiz))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"fiz" must be a number if supplied',
-      path: 'fiz',
-    });
-  }
-  if (typeof params.buzz === 'undefined') {
-    errors.push({
-      code: 'REQUIRED',
-      title: '"buzz" is required',
-      path: 'buzz',
-    });
-  }
-  if (
-    typeof params.buzz !== 'undefined' &&
-    (typeof params.buzz !== 'number' || Number.isNaN(params.buzz))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"buzz" must be a number',
-      path: 'buzz',
-    });
-  }
-  return errors;
+export function validateGizmo(
+  params: types.Gizmo,
+  parentPath?: string,
+): ValidationError[] {
+  const validator = new Validator(parentPath);
+
+  validator.optional(params.id, 'id').ensure(string, maxLength(30));
+  validator.optional(params.name, 'name').ensure(string);
+  validator.optional(params.size, 'size').ensure(using(validateProductSize));
+
+  return validator.errors;
 }
-export function isWidgetFoo(obj: any): obj is types.WidgetFoo {
-  return typeof obj !== 'undefined' && !validateWidgetFoo(obj).length;
+export function isGizmo(obj: any): obj is types.Gizmo {
+  return typeof obj !== 'undefined' && !validateGizmo(obj).length;
+}
+
+export function validateGizmosResponse(
+  params: types.GizmosResponse,
+  parentPath?: string,
+): ValidationError[] {
+  const validator = new Validator(parentPath);
+
+  validator.required(params.data, 'data').ensure(array(using(validateGizmo)));
+
+  return validator.errors;
+}
+export function isGizmosResponse(obj: any): obj is types.GizmosResponse {
+  return typeof obj !== 'undefined' && !validateGizmosResponse(obj).length;
+}
+
+export function validateNewWidget(
+  params: types.NewWidget,
+  parentPath?: string,
+): ValidationError[] {
+  const validator = new Validator(parentPath);
+
+  validator.optional(params.buzz, 'buzz').ensure(number, multipleOf(5));
+  validator.required(params.fiz, 'fiz').ensure(number, multipleOf(3));
+  validator.optional(params.fizbuzz, 'fizbuzz').ensure(number, multipleOf(15));
+  validator.optional(params.foo, 'foo').ensure(using(validateNewWidgetFoo));
+  validator
+    .optional(params.name, 'name')
+    .ensure(string, maxLength(30), pattern(/[0-9a-fA-F]+/));
+  validator.optional(params.size, 'size').ensure(using(validateProductSize));
+
+  return validator.errors;
+}
+export function isNewWidget(obj: any): obj is types.NewWidget {
+  return typeof obj !== 'undefined' && !validateNewWidget(obj).length;
 }
 
 export function validateNewWidgetFoo(
   params: types.NewWidgetFoo,
+  parentPath?: string,
 ): ValidationError[] {
-  const errors: ValidationError[] = [];
-  if (
-    typeof params.fiz !== 'undefined' &&
-    (typeof params.fiz !== 'number' || Number.isNaN(params.fiz))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"fiz" must be a number if supplied',
-      path: 'fiz',
-    });
-  }
-  if (typeof params.buzz === 'undefined') {
-    errors.push({
-      code: 'REQUIRED',
-      title: '"buzz" is required',
-      path: 'buzz',
-    });
-  }
-  if (
-    typeof params.buzz !== 'undefined' &&
-    (typeof params.buzz !== 'number' || Number.isNaN(params.buzz))
-  ) {
-    errors.push({
-      code: 'TYPE',
-      title: '"buzz" must be a number',
-      path: 'buzz',
-    });
-  }
-  return errors;
+  const validator = new Validator(parentPath);
+
+  validator.required(params.buzz, 'buzz').ensure(number);
+  validator.optional(params.fiz, 'fiz').ensure(number);
+
+  return validator.errors;
 }
 export function isNewWidgetFoo(obj: any): obj is types.NewWidgetFoo {
   return typeof obj !== 'undefined' && !validateNewWidgetFoo(obj).length;
+}
+
+export function validateWidget(
+  params: types.Widget,
+  parentPath?: string,
+): ValidationError[] {
+  const validator = new Validator(parentPath);
+
+  validator.optional(params.buzz, 'buzz').ensure(number, multipleOf(5));
+  validator.required(params.fiz, 'fiz').ensure(number, multipleOf(3));
+  validator.optional(params.fizbuzz, 'fizbuzz').ensure(number, multipleOf(15));
+  validator.optional(params.foo, 'foo').ensure(using(validateWidgetFoo));
+  validator.required(params.id, 'id').ensure(string, maxLength(30));
+  validator
+    .optional(params.name, 'name')
+    .ensure(string, maxLength(30), pattern(/[0-9a-fA-F]+/));
+  validator.optional(params.size, 'size').ensure(using(validateProductSize));
+
+  return validator.errors;
+}
+export function isWidget(obj: any): obj is types.Widget {
+  return typeof obj !== 'undefined' && !validateWidget(obj).length;
+}
+
+export function validateWidgetFoo(
+  params: types.WidgetFoo,
+  parentPath?: string,
+): ValidationError[] {
+  const validator = new Validator(parentPath);
+
+  validator.required(params.buzz, 'buzz').ensure(number);
+  validator.optional(params.fiz, 'fiz').ensure(number);
+
+  return validator.errors;
+}
+export function isWidgetFoo(obj: any): obj is types.WidgetFoo {
+  return typeof obj !== 'undefined' && !validateWidgetFoo(obj).length;
 }
 
 export function validateCreateGizmoSize(
@@ -1190,8 +656,8 @@ export function validateCreateGizmoSize(
   return [];
 }
 
-export function validateExhaustiveParamsQueryEnum(
-  value: types.ExhaustiveParamsQueryEnum,
+export function validateExhaustiveParamsHeaderEnum(
+  value: types.ExhaustiveParamsHeaderEnum,
 ): ValidationError[] {
   const errors: ValidationError[] = [];
   if (typeof value === 'string' && !['one', 'two', 'three'].includes(value)) {
@@ -1204,8 +670,8 @@ export function validateExhaustiveParamsQueryEnum(
   return [];
 }
 
-export function validateExhaustiveParamsQueryEnumArray(
-  value: types.ExhaustiveParamsQueryEnumArray,
+export function validateExhaustiveParamsHeaderEnumArray(
+  value: types.ExhaustiveParamsHeaderEnumArray,
 ): ValidationError[] {
   const errors: ValidationError[] = [];
   if (typeof value === 'string' && !['one', 'two', 'three'].includes(value)) {
@@ -1246,8 +712,8 @@ export function validateExhaustiveParamsPathEnumArray(
   return [];
 }
 
-export function validateExhaustiveParamsHeaderEnum(
-  value: types.ExhaustiveParamsHeaderEnum,
+export function validateExhaustiveParamsQueryEnum(
+  value: types.ExhaustiveParamsQueryEnum,
 ): ValidationError[] {
   const errors: ValidationError[] = [];
   if (typeof value === 'string' && !['one', 'two', 'three'].includes(value)) {
@@ -1260,8 +726,8 @@ export function validateExhaustiveParamsHeaderEnum(
   return [];
 }
 
-export function validateExhaustiveParamsHeaderEnumArray(
-  value: types.ExhaustiveParamsHeaderEnumArray,
+export function validateExhaustiveParamsQueryEnumArray(
+  value: types.ExhaustiveParamsQueryEnumArray,
 ): ValidationError[] {
   const errors: ValidationError[] = [];
   if (typeof value === 'string' && !['one', 'two', 'three'].includes(value)) {
@@ -1289,4 +755,235 @@ export function validateProductSize(
     });
   }
   return [];
+}
+
+export function validateExampleUnion(
+  params: types.ExampleUnion,
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+
+  const gizmoErrors = validateGizmo(params as types.Gizmo);
+  if (!gizmoErrors.length) return [];
+  errors.push(...gizmoErrors);
+
+  const widgetErrors = validateWidget(params as types.Widget);
+  if (!widgetErrors.length) return [];
+  errors.push(...widgetErrors);
+
+  return errors;
+}
+
+export type ResponseBuilder<T> = (
+  validationErrors: ValidationError[],
+  err: any,
+) => T;
+export class ValidatedAuthPermutationService
+  implements types.AuthPermutationService
+{
+  constructor(
+    private readonly service: types.AuthPermutationService,
+    private readonly handlers: { buildVoid: ResponseBuilder<void> },
+  ) {}
+
+  async allAuthSchemes() {
+    const validationErrors: ValidationError[] = [];
+    try {
+      return this.service.allAuthSchemes();
+    } catch (err) {
+      return this.handlers.buildVoid(validationErrors, err);
+    }
+  }
+
+  async comboAuthSchemes() {
+    const validationErrors: ValidationError[] = [];
+    try {
+      return this.service.comboAuthSchemes();
+    } catch (err) {
+      return this.handlers.buildVoid(validationErrors, err);
+    }
+  }
+}
+
+export class ValidatedExhaustiveService implements types.ExhaustiveService {
+  constructor(
+    private readonly service: types.ExhaustiveService,
+    private readonly handlers: { buildVoid: ResponseBuilder<void> },
+  ) {}
+
+  async exhaustiveFormats(params?: types.ExhaustiveFormatsParams) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateExhaustiveFormatsParams(params);
+      if (validationErrors.length) {
+        return this.handlers.buildVoid(validationErrors, undefined);
+      }
+      const sanitizedParams =
+        sanitizers.sanitizeExhaustiveFormatsParams(params);
+      return this.service.exhaustiveFormats(sanitizedParams);
+    } catch (err) {
+      return this.handlers.buildVoid(validationErrors, err);
+    }
+  }
+
+  async exhaustiveParams(params: types.ExhaustiveParamsParams) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateExhaustiveParamsParams(params);
+      if (validationErrors.length) {
+        return this.handlers.buildVoid(validationErrors, undefined);
+      }
+      const sanitizedParams = sanitizers.sanitizeExhaustiveParamsParams(params);
+      return this.service.exhaustiveParams(sanitizedParams);
+    } catch (err) {
+      return this.handlers.buildVoid(validationErrors, err);
+    }
+  }
+}
+
+export class ValidatedGizmoService implements types.GizmoService {
+  constructor(
+    private readonly service: types.GizmoService,
+    private readonly handlers: {
+      buildGizmo: ResponseBuilder<types.Gizmo>;
+      buildGizmosResponse: ResponseBuilder<types.GizmosResponse>;
+    },
+  ) {}
+
+  async createGizmo(params?: types.CreateGizmoParams) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateCreateGizmoParams(params);
+      if (validationErrors.length) {
+        return sanitizers.sanitizeGizmo(
+          this.handlers.buildGizmo(validationErrors, undefined),
+        );
+      }
+      const sanitizedParams = sanitizers.sanitizeCreateGizmoParams(params);
+      return sanitizers.sanitizeGizmo(
+        await this.service.createGizmo(sanitizedParams),
+      );
+    } catch (err) {
+      return sanitizers.sanitizeGizmo(
+        this.handlers.buildGizmo(validationErrors, err),
+      );
+    }
+  }
+
+  async getGizmos(params?: types.GetGizmosParams) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateGetGizmosParams(params);
+      if (validationErrors.length) {
+        return sanitizers.sanitizeGizmosResponse(
+          this.handlers.buildGizmosResponse(validationErrors, undefined),
+        );
+      }
+      const sanitizedParams = sanitizers.sanitizeGetGizmosParams(params);
+      return sanitizers.sanitizeGizmosResponse(
+        await this.service.getGizmos(sanitizedParams),
+      );
+    } catch (err) {
+      return sanitizers.sanitizeGizmosResponse(
+        this.handlers.buildGizmosResponse(validationErrors, err),
+      );
+    }
+  }
+
+  async updateGizmo(params?: types.UpdateGizmoParams) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateUpdateGizmoParams(params);
+      if (validationErrors.length) {
+        return sanitizers.sanitizeGizmo(
+          this.handlers.buildGizmo(validationErrors, undefined),
+        );
+      }
+      const sanitizedParams = sanitizers.sanitizeUpdateGizmoParams(params);
+      return sanitizers.sanitizeGizmo(
+        await this.service.updateGizmo(sanitizedParams),
+      );
+    } catch (err) {
+      return sanitizers.sanitizeGizmo(
+        this.handlers.buildGizmo(validationErrors, err),
+      );
+    }
+  }
+}
+
+export class ValidatedWidgetService implements types.WidgetService {
+  constructor(
+    private readonly service: types.WidgetService,
+    private readonly handlers: {
+      buildWidget: ResponseBuilder<types.Widget>;
+      buildVoid: ResponseBuilder<void>;
+    },
+  ) {}
+
+  async createWidget(params?: types.CreateWidgetParams) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateCreateWidgetParams(params);
+      if (validationErrors.length) {
+        return this.handlers.buildVoid(validationErrors, undefined);
+      }
+      const sanitizedParams = sanitizers.sanitizeCreateWidgetParams(params);
+      return this.service.createWidget(sanitizedParams);
+    } catch (err) {
+      return this.handlers.buildVoid(validationErrors, err);
+    }
+  }
+
+  async deleteWidgetFoo(params: types.DeleteWidgetFooParams) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateDeleteWidgetFooParams(params);
+      if (validationErrors.length) {
+        return this.handlers.buildVoid(validationErrors, undefined);
+      }
+      const sanitizedParams = sanitizers.sanitizeDeleteWidgetFooParams(params);
+      return this.service.deleteWidgetFoo(sanitizedParams);
+    } catch (err) {
+      return this.handlers.buildVoid(validationErrors, err);
+    }
+  }
+
+  async getWidgetFoo(params: types.GetWidgetFooParams) {
+    let validationErrors: ValidationError[] = [];
+    try {
+      validationErrors = validateGetWidgetFooParams(params);
+      if (validationErrors.length) {
+        return sanitizers.sanitizeWidget(
+          this.handlers.buildWidget(validationErrors, undefined),
+        );
+      }
+      const sanitizedParams = sanitizers.sanitizeGetWidgetFooParams(params);
+      return sanitizers.sanitizeWidget(
+        await this.service.getWidgetFoo(sanitizedParams),
+      );
+    } catch (err) {
+      return sanitizers.sanitizeWidget(
+        this.handlers.buildWidget(validationErrors, err),
+      );
+    }
+  }
+
+  async getWidgets() {
+    const validationErrors: ValidationError[] = [];
+    try {
+      return sanitizers.sanitizeWidget(await this.service.getWidgets());
+    } catch (err) {
+      return sanitizers.sanitizeWidget(
+        this.handlers.buildWidget(validationErrors, err),
+      );
+    }
+  }
+
+  async putWidget() {
+    const validationErrors: ValidationError[] = [];
+    try {
+      return this.service.putWidget();
+    } catch (err) {
+      return this.handlers.buildVoid(validationErrors, err);
+    }
+  }
 }
