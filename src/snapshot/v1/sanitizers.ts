@@ -13,6 +13,7 @@
  */
 
 import * as types from './types';
+import * as validators from './validators';
 
 function compact<T extends object>(obj: T): T {
   // Strip undefined values.
@@ -158,12 +159,11 @@ export function sanitizeWidgetFoo(obj: types.WidgetFoo): types.WidgetFoo {
 export function sanitizeExampleUnion(
   obj: types.ExampleUnion,
 ): types.ExampleUnion {
-  return compact(
-    [
-      sanitizeGizmo(obj as types.Gizmo),
-      sanitizeWidget(obj as types.Widget),
-    ].reduce((acc, val) => ({ ...acc, ...val }), {}),
-  );
+  if (validators.isWidget(obj)) {
+    return sanitizeWidget(obj);
+  } else {
+    return sanitizeGizmo(obj);
+  }
 }
 
 export function sanitizeCreateGizmoParams(
