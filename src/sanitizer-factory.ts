@@ -23,6 +23,7 @@ import {
 import { header } from '@basketry/typescript/lib/warning';
 
 const typeModule = 'types';
+const validatorModule = 'validators';
 
 export class SanitizerFactory {
   public readonly target = 'typescript';
@@ -51,6 +52,9 @@ export class SanitizerFactory {
     yield `import * as ${typeModule} from "${
       this.options?.typescriptValidators?.typesImportPath ?? './types'
     }"`;
+    if (this.service.unions.length) {
+      yield `import * as ${validatorModule} from "./validators"`;
+    }
     yield '';
 
     yield 'function compact<T extends object>(obj: T): T {';
@@ -120,14 +124,36 @@ export class SanitizerFactory {
         typeModule,
       )} {`;
 
-      yield '  return compact([';
-      // TODO: Handle primitive members
-      for (const member of union.members) {
-        yield `${camel(
+      // Sort by number of properties in descending order.
+      // This is to ensure that the most specific type is checked first.
+      // Note that this is not a perfect solution becuase we don't sort
+      // on the complexity of child types, but it's better than nothing,
+      const members = union.members.sort((a, b) => {
+        // TODO: Handle non-type members
+        const aa = getTypeByName(this.service, a.typeName.value);
+        const bb = getTypeByName(this.service, b.typeName.value);
+
+        if (!aa || !bb) return 0;
+
+        return bb.properties.length - aa.properties.length;
+      });
+
+      for (let i = 0; i < members.length - 1; i++) {
+        // TODO: Handle primitive members
+        const member = members[i];
+        if (i > 0) yield 'else ';
+        yield `if (validators.is${pascal(
+          members[i].typeName.value,
+        )}(obj)) { return ${camel(
           `sanitize_${member.typeName.value}`,
-        )}(obj as ${buildTypeName(member, typeModule)}),`;
+        )}(obj); }`;
       }
-      yield '].reduce( (acc, val) => ({ ...acc, ...val }), {}));';
+
+      const lastMember = members[members.length - 1];
+      if (members.length > 1) yield 'else {';
+      yield `return ${camel(`sanitize_${lastMember.typeName.value}`)}(obj);`;
+
+      if (members.length > 1) yield '}';
 
       yield '}';
       yield '';
