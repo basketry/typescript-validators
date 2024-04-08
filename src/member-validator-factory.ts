@@ -202,6 +202,7 @@ export class ValidatorMethodFactory {
           validators: ValidationFunction[],
           isRequired: boolean,
         ) {
+          if (typeof value === 'undefined' && !isRequired) return;
           for (const validator of validators) {
             this._errors.push(
               ...validator(
