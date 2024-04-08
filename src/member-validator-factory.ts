@@ -125,6 +125,12 @@ export class ValidatorMethodFactory {
     this.codes.add('NUMBER_LTE');
   }
 
+  private needsConstantValidator = false;
+  touchConstantValidator() {
+    this.needsConstantValidator = true;
+    this.codes.add('CONSTANT');
+  }
+
   *buildInternalHelperMethods(): Iterable<string> {
     yield this.buildValidationErrorType();
     yield '';
@@ -134,6 +140,7 @@ export class ValidatorMethodFactory {
     yield '';
 
     yield* this.buildRequiredValidator();
+    yield* this.buildConstantValidator();
     yield* this.buildArrayItemValidator();
     yield* this.buildArrayMaxItemsValidator();
     yield* this.buildArrayMinItemsValidator();
@@ -622,6 +629,28 @@ export class ValidatorMethodFactory {
     };`;
     }
   }
+
+  private *buildConstantValidator(): Iterable<string> {
+    if (this.needsConstantValidator) {
+      yield `const constant: (expected: any) => ValidationFunction =
+      (expected) => (value, path, isRequired) => {
+        if (value !== expected && (isRequired || typeof value !== 'undefined')) {
+          const expectedText =
+            typeof expected === 'string' ? \`"\${expected}"\` : expected;
+          return [
+            {
+              code: 'CONSTANT',
+              title: \`"\${path}" must equal \${expectedText}\${
+                isRequired ? ' if supplied' : ''
+              }\`,
+              path,
+            },
+          ];
+        }
+        return [];
+      };`;
+    }
+  }
 }
 
 export class MemberValidatorFactory {
@@ -657,11 +686,15 @@ export class MemberValidatorFactory {
       }
 
       if (member.isPrimitive) {
-        yield* this.buildStringTypeValidation(member);
-        yield* this.buildNumberTypeValidation(member);
-        yield* this.buildIntegerTypeValidation(member);
-        yield* this.buildBooleanTypeValidation(member);
-        yield* this.buildDateTypeValidation(member);
+        if (member.constant) {
+          yield* this.buildConstantValidation(member);
+        } else {
+          yield* this.buildStringTypeValidation(member);
+          yield* this.buildNumberTypeValidation(member);
+          yield* this.buildIntegerTypeValidation(member);
+          yield* this.buildBooleanTypeValidation(member);
+          yield* this.buildDateTypeValidation(member);
+        }
 
         for (const rule of member.rules) {
           yield* this.buildStringMaxLengthValidation(rule);
@@ -683,6 +716,19 @@ export class MemberValidatorFactory {
     }
     yield ' ';
     yield 'return validator.errors;';
+  }
+
+  private *buildConstantValidation(
+    member: Property | Parameter,
+  ): Iterable<string> {
+    if (member.isPrimitive && member.constant?.value) {
+      this.state.touchConstantValidator();
+      if (typeof member.constant.value === 'string') {
+        yield `constant("${member.constant.value}"),`;
+      } else {
+        yield `constant(${member.constant.value}),`;
+      }
+    }
   }
 
   private *buildStringTypeValidation(
