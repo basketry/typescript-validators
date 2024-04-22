@@ -192,7 +192,7 @@ export class ValidatorMethodFactory {
         required(value: any, path: string) {
           return {
             ensure: (...validators: ValidationFunction[]) =>
-              this.run(value, path, [required, ...validators], true),
+              this.run(value, path, validators, true),
           };
         }
       
