@@ -62,15 +62,15 @@ class Validator {
     validators: ValidationFunction[],
     isRequired: boolean,
   ) {
-    if (typeof value === 'undefined' && !isRequired) return;
-    for (const validator of validators) {
-      this._errors.push(
-        ...validator(
-          value,
-          this.parentPath ? `${this.parentPath}.${path}` : path,
-          isRequired,
-        ),
-      );
+    const p = this.parentPath ? `${this.parentPath}.${path}` : path;
+
+    if (isRequired) {
+      this._errors.push(...required(value, p, true));
+    }
+    if (typeof value !== 'undefined') {
+      for (const validator of validators) {
+        this._errors.push(...validator(value, p, isRequired));
+      }
     }
   }
 }
