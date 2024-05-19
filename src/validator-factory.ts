@@ -340,22 +340,84 @@ export class ValidatorFactory {
     yield `export function ${buildTypeValidatorName(
       union,
     )}(params: ${buildTypeName(union, 'types')}): ValidationError[] {`;
-    yield 'const errors: ValidationError[] = [];';
 
-    for (const member of union.members) {
-      if (!member.isPrimitive) {
-        const errorVariable = `${camel(member.typeName.value)}Errors`;
-        yield '\n';
-        yield `const ${errorVariable} = ${buildTypeValidatorName(
-          member,
-        )}(params as ${buildTypeName(member, 'types')})`;
-        yield `if(!${errorVariable}.length) return [];`;
-        yield `errors.push(...${errorVariable})`;
-        yield '\n';
+    if (union.discriminator) {
+      const propertyName = camel(union.discriminator.value);
+
+      const allowedValues = union.members
+        .map((member) => {
+          const type = getTypeByName(this.service, member.typeName.value);
+          if (!type) return;
+          const property = type.properties.find(
+            (prop) => camel(prop.name.value) === propertyName,
+          );
+          if (!property) return;
+          if (!('constant' in property)) return;
+          return property.constant?.value;
+        })
+        .filter(
+          (
+            value: string | number | boolean | undefined,
+          ): value is string | number | boolean => typeof value !== 'undefined',
+        );
+
+      const allowedValueString = allowedValues
+        .map((v) => (typeof v === 'string' ? `"${v}"` : `${v}`))
+        .join(', ');
+
+      yield `switch(params.${propertyName}) {`;
+
+      for (const customValue of union.members) {
+        const type = getTypeByName(this.service, customValue.typeName.value);
+        if (!type) continue;
+        const property = type.properties.find(
+          (prop) => camel(prop.name.value) === propertyName,
+        );
+        if (!property) continue;
+        if (!('constant' in property)) continue;
+
+        const k = property.constant?.value;
+        if (!k) continue;
+
+        if (typeof k === 'string') {
+          yield `case '${k}': {`;
+        } else {
+          yield `case ${k}: {`;
+        }
+
+        yield `return ${buildTypeValidatorName(type)}(params as ${buildTypeName(
+          type,
+          'types',
+        )})`;
+
+        yield '}';
       }
+
+      yield `default: {`;
+      this.state.touchStringEnumValidator();
+      yield ` return [{ code: 'STRING_ENUM', title: 'Property \`${propertyName}\` must be one of [${allowedValueString}]', path: '' }];`;
+      yield '}';
+
+      yield `}`;
+    } else {
+      yield 'const errors: ValidationError[] = [];';
+
+      for (const member of union.members) {
+        if (!member.isPrimitive) {
+          const errorVariable = `${camel(member.typeName.value)}Errors`;
+          yield '\n';
+          yield `const ${errorVariable} = ${buildTypeValidatorName(
+            member,
+          )}(params as ${buildTypeName(member, 'types')})`;
+          yield `if(!${errorVariable}.length) return [];`;
+          yield `errors.push(...${errorVariable})`;
+          yield '\n';
+        }
+      }
+
+      yield `return errors;`;
     }
 
-    yield `return errors;`;
     yield `}`;
   }
 
