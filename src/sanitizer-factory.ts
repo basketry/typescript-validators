@@ -34,12 +34,16 @@ export class SanitizerFactory {
   ) {}
 
   build(): File[] {
-    return [
-      {
-        path: buildFilePath(['sanitizers.ts'], this.service, this.options),
-        contents: format(from(this.buildFile()), this.options),
-      },
-    ];
+    if (!this.options?.typescriptValidators?.validatorsOnly) {
+      return [
+        {
+          path: buildFilePath(['sanitizers.ts'], this.service, this.options),
+          contents: format(from(this.buildFile()), this.options),
+        },
+      ];
+    }
+
+    return [];
   }
 
   private buildMethodName(member: Type | Union): string {

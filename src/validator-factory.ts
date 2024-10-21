@@ -128,9 +128,11 @@ export class ValidatorFactory {
       this.options?.typescriptValidators?.typesImportPath ?? './types'
     }"`;
 
-    yield `import ${
-      this.options?.typescript?.typeImports ? ' type ' : ' '
-    } * as sanitizers from "./sanitizers"`;
+    if (!this.options?.typescriptValidators?.validatorsOnly) {
+      yield `import ${
+        this.options?.typescript?.typeImports ? ' type ' : ' '
+      } * as sanitizers from "./sanitizers"`;
+    }
   }
 
   private readonly codes = new Set<string>();
@@ -428,118 +430,119 @@ export class ValidatorFactory {
   }
 
   private *buildValidatedServiceWrappers(): Iterable<string> {
-    yield `export type ResponseBuilder<T> = (validationErrors: ValidationError[], err: any) => T`;
-    for (const int of sort(this.service.interfaces)) {
-      const returnTypes = sort(
-        Array.from(
-          new Set(
-            int.methods
-              .map((m) =>
-                getTypeByName(this.service, m.returnType?.typeName.value),
-              )
-              .filter((t): t is Type => !!t),
+    if (!this.options?.typescriptValidators?.validatorsOnly) {
+      yield `export type ResponseBuilder<T> = (validationErrors: ValidationError[], err: any) => T`;
+      for (const int of sort(this.service.interfaces)) {
+        const returnTypes = sort(
+          Array.from(
+            new Set(
+              int.methods
+                .map((m) =>
+                  getTypeByName(this.service, m.returnType?.typeName.value),
+                )
+                .filter((t): t is Type => !!t),
+            ),
           ),
-        ),
-      );
-
-      const hasVoid = int.methods.some((m) => !m.returnType);
-
-      const handlers = returnTypes.map(
-        (type) =>
-          `${camel(
-            `build_${type.name.value}`,
-          )}: ResponseBuilder<${buildTypeName(type, 'types')}>`,
-      );
-      if (hasVoid) {
-        handlers.push('buildVoid: ResponseBuilder<void>');
-      }
-
-      const handlersType = `{${handlers.join(',')}}`;
-
-      const intName = buildInterfaceName(int, 'types');
-      yield `export class ${pascal(
-        `validated_${int.name.value}_service`,
-      )} implements ${buildInterfaceName(int, 'types')} {`;
-      yield `constructor(private readonly service: ${intName}, private readonly handlers: ${handlersType}){}`;
-      yield '';
-      for (const method of sort(int.methods)) {
-        const methodName = buildMethodName(method);
-        const returnType = getTypeByName(
-          this.service,
-          method.returnType?.typeName.value,
         );
 
-        const sanitize = (call: string, isAsync: boolean): string => {
-          if (returnType) {
-            return `sanitizers.${camel(`sanitize_${returnType.name.value}`)}(${
-              isAsync ? 'await' : ''
-            } ${call})`;
-          } else {
-            return call;
-          }
-        };
+        const hasVoid = int.methods.some((m) => !m.returnType);
 
-        const sanitizeAsync = (call: string): string => {
-          return sanitize(call, true);
-        };
+        const handlers = returnTypes.map(
+          (type) =>
+            `${camel(
+              `build_${type.name.value}`,
+            )}: ResponseBuilder<${buildTypeName(type, 'types')}>`,
+        );
+        if (hasVoid) {
+          handlers.push('buildVoid: ResponseBuilder<void>');
+        }
 
-        const sanitizeSync = (call: string): string => {
-          return sanitize(call, false);
-        };
+        const handlersType = `{${handlers.join(',')}}`;
 
-        const handlerName = returnType
-          ? `this.handlers.${camel(`build_${returnType.name.value}`)}`
-          : 'this.handlers.buildVoid';
+        const intName = buildInterfaceName(int, 'types');
+        yield `export class ${pascal(
+          `validated_${int.name.value}_service`,
+        )} implements ${buildInterfaceName(int, 'types')} {`;
+        yield `constructor(private readonly service: ${intName}, private readonly handlers: ${handlersType}){}`;
+        yield '';
+        for (const method of sort(int.methods)) {
+          const methodName = buildMethodName(method);
+          const returnType = getTypeByName(
+            this.service,
+            method.returnType?.typeName.value,
+          );
 
-        const hasParams = !!method.parameters.length;
-        const hasRequiredParams = method.parameters.some(isRequired);
-        const paramDef = method.parameters.length
-          ? `params${hasRequiredParams ? '' : '?'}: ${buildMethodParamsTypeName(
+          const sanitize = (call: string, isAsync: boolean): string => {
+            if (returnType) {
+              return `sanitizers.${camel(
+                `sanitize_${returnType.name.value}`,
+              )}(${isAsync ? 'await' : ''} ${call})`;
+            } else {
+              return call;
+            }
+          };
+
+          const sanitizeAsync = (call: string): string => {
+            return sanitize(call, true);
+          };
+
+          const sanitizeSync = (call: string): string => {
+            return sanitize(call, false);
+          };
+
+          const handlerName = returnType
+            ? `this.handlers.${camel(`build_${returnType.name.value}`)}`
+            : 'this.handlers.buildVoid';
+
+          const hasParams = !!method.parameters.length;
+          const hasRequiredParams = method.parameters.some(isRequired);
+          const paramDef = method.parameters.length
+            ? `params${
+                hasRequiredParams ? '' : '?'
+              }: ${buildMethodParamsTypeName(method, 'types')}`
+            : '';
+          yield `async ${methodName}(${paramDef}) {`;
+          yield `${
+            hasParams ? 'let' : 'const'
+          } validationErrors: ValidationError[] = [];`;
+          yield 'try {';
+          if (hasParams) {
+            yield `validationErrors = ${buildParamsValidatorName(
               method,
-              'types',
-            )}`
-          : '';
-        yield `async ${methodName}(${paramDef}) {`;
-        yield `${
-          hasParams ? 'let' : 'const'
-        } validationErrors: ValidationError[] = [];`;
-        yield 'try {';
-        if (hasParams) {
-          yield `validationErrors = ${buildParamsValidatorName(
-            method,
-          )}(params)`;
-          yield `if(validationErrors.length) {`;
+            )}(params)`;
+            yield `if(validationErrors.length) {`;
+            if (returnType) {
+              yield `return ${sanitizeSync(
+                `${handlerName}(validationErrors, undefined)`,
+              )}`;
+            } else {
+              yield `return ${handlerName}(validationErrors, undefined)`;
+            }
+            yield '}';
+          }
+          if (hasParams) {
+            yield `const sanitizedParams = sanitizers.${camel(
+              `sanitize_${method.name.value}_params`,
+            )}(params)`;
+          }
+          yield `return ${sanitizeAsync(
+            `this.service.${methodName}(${hasParams ? 'sanitizedParams' : ''})`,
+          )}`;
+          yield '} catch (err) {';
           if (returnType) {
             yield `return ${sanitizeSync(
-              `${handlerName}(validationErrors, undefined)`,
+              `${handlerName}(validationErrors, err)`,
             )}`;
           } else {
-            yield `return ${handlerName}(validationErrors, undefined)`;
+            yield `return ${handlerName}(validationErrors, err)`;
           }
           yield '}';
+          yield '}';
+          yield '';
         }
-        if (hasParams) {
-          yield `const sanitizedParams = sanitizers.${camel(
-            `sanitize_${method.name.value}_params`,
-          )}(params)`;
-        }
-        yield `return ${sanitizeAsync(
-          `this.service.${methodName}(${hasParams ? 'sanitizedParams' : ''})`,
-        )}`;
-        yield '} catch (err) {';
-        if (returnType) {
-          yield `return ${sanitizeSync(
-            `${handlerName}(validationErrors, err)`,
-          )}`;
-        } else {
-          yield `return ${handlerName}(validationErrors, err)`;
-        }
-        yield '}';
         yield '}';
         yield '';
       }
-      yield '}';
-      yield '';
     }
   }
 }
